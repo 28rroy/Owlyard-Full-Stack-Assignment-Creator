@@ -1,0 +1,188 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'SAM template for Owlyard MVP backend'
+
+Parameters:
+  AllowedOrigins:
+    Type: String
+    Default: ""
+    Description: "Comma-separated list of allowed origins for CORS."
+
+  StageName:
+    Type: String
+    Default: ""
+    Description: "The stage name for the API Gateway"
+
+  CognitoUserPoolArn:
+    Type: String
+    Description: "The ARN of the Cognito User Pool"
+    Default: ""
+
+  GroupsTableName:
+    Type: String
+    Description: "The name of the DynamoDB table listing groups"
+    Default: ""
+
+
+Resources:
+
+  #################################################
+  # 1. Lambda Layer for shared dependencies
+  #################################################
+  OwlyardMVPLambdaLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: owlyard-mvp-lambda-layer
+      Description: "A Lambda Layer for shared dependencies"
+      ContentUri: layer/
+      CompatibleRuntimes:
+        - nodejs20.x
+      LicenseInfo: "MIT"
+
+
+  #################################################
+  # 2a. Lambda function to handle multipart uploads
+  #################################################
+  CreateGroupsTableFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Lambda function to list a group in groups table"
+      Handler: src/createGroupsTable.handler
+      Runtime: nodejs20.x
+      CodeUri: .
+      MemorySize: 128
+      Timeout: 30
+      Layers:
+        - !Ref OwlyardMVPLambdaLayer
+      Role: !GetAtt CreateGroupsLambdaExecutionRole.Arn
+      Environment:
+        Variables:
+          ALLOWED_ORIGINS: !Ref AllowedOrigins
+          DYNAMODB_TABLE: !Ref GroupsTableName
+      Events:
+        CreateGroupsAPI:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /create-group-api
+            Method: get
+
+
+  ############################################################
+  # 3a. IAM Role for the Lambda function listing all resources
+  ############################################################
+  CreateGroupsLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CreateGroupsLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: 
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${GroupsTableName}"
+
+
+  #################################################
+  # 4. API Gateway definition
+  #################################################
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref StageName
+      EndpointConfiguration:
+        Type: REGIONAL
+        Cors: "'*'"
+      DefinitionBody:
+        openapi: "3.0.1"
+        info:
+          title: "Owlyard-MVP-API"
+          version: "1.0"
+        paths:
+          /create-group-api:
+            # ----- GET -----
+            get:
+              summary: "Create a group in DynamoDB"
+              operationId: "createGroupsApi"
+              responses:
+                '200':
+                  description: "Successful response"
+              x-amazon-apigateway-integration:
+                httpMethod: "POST"
+                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateGroupsTableFunction.Arn}/invocations"
+                passthroughBehavior: "when_no_match"
+                type: "aws_proxy"
+              security:
+                - Cognito_Auth: []
+            # ----- OPTIONS -----
+            options:
+              summary: "CORS preflight for /create-group-api"
+              operationId: "optionsCreateGroupsApi"
+              responses:
+                '200':
+                  description: "CORS response handled by Lambda"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      schema:
+                        type: string
+                    Access-Control-Allow-Methods:
+                      schema:
+                        type: string
+                    Access-Control-Allow-Headers:
+                      schema:
+                        type: string
+              x-amazon-apigateway-integration:
+                type: "mock"
+                requestTemplates:
+                  application/json: "{\"statusCode\": 200}"
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+        components:
+          securitySchemes:
+            Cognito_Auth:
+              type: "apiKey"
+              name: "Authorization"
+              in: "header"
+              x-amazon-apigateway-authtype: "cognito_user_pools"
+              x-amazon-apigateway-authorizer:
+                providerARNs:
+                  - !Ref CognitoUserPoolArn
+                type: "cognito_user_pools"
+
+
+  #################################################
+  # 5. Log Groups for Lambda functions
+  #################################################
+  CreateGroupsTableFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CreateGroupsTableFunction}"
+      RetentionInDays: 30
+
+
+Outputs:
+  ApiUrl:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${StageName}/post-resource-to-s3-api"
