@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Assignment Creator Backend - Lambda function with DynamoDB for storing
+  assignments
+
+  '
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.9
+Resources:
+  AssignmentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AssignmentsTable
+      AttributeDefinitions:
+      - AttributeName: assignmentId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: assignmentId
+        KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  SaveAssignmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: SaveAssignmentFunction
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME:
+            Ref: AssignmentsTable
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: AssignmentsTable
+      Events:
+        SaveAssignment:
+          Type: Api
+          Properties:
+            Path: /assignments
+            Method: post
+        AssignmentOptions:
+          Type: Api
+          Properties:
+            Path: /assignments
+            Method: options
+    Metadata:
+      SamResourceId: SaveAssignmentFunction
+  GetAssignmentsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: GetAssignmentsFunction
+      Handler: get_assignments.lambda_handler
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME:
+            Ref: AssignmentsTable
+      Policies:
+      - DynamoDBReadPolicy:
+          TableName:
+            Ref: AssignmentsTable
+      Events:
+        GetAssignments:
+          Type: Api
+          Properties:
+            Path: /assignments
+            Method: get
+    Metadata:
+      SamResourceId: GetAssignmentsFunction
+Outputs:
+  AssignmentApi:
+    Description: API Gateway endpoint URL for Assignment functions
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/assignments
+  SaveAssignmentFunction:
+    Description: Save Assignment Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - SaveAssignmentFunction
+      - Arn
+  AssignmentsTableName:
+    Description: DynamoDB table name
+    Value:
+      Ref: AssignmentsTable
