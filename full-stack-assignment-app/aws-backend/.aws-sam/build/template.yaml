@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 'Assignment Creator Backend - Lambda function with DynamoDB for storing
-  assignments
+Description: 'Assignment Creator Backend - Lambda functions that connect to manually
+  created DynamoDB table
 
   '
 Globals:
@@ -9,19 +9,6 @@ Globals:
     Timeout: 30
     Runtime: python3.9
 Resources:
-  AssignmentsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: AssignmentsTable
-      AttributeDefinitions:
-      - AttributeName: assignmentId
-        AttributeType: S
-      KeySchema:
-      - AttributeName: assignmentId
-        KeyType: HASH
-      BillingMode: PAY_PER_REQUEST
-      PointInTimeRecoverySpecification:
-        PointInTimeRecoveryEnabled: true
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -32,12 +19,10 @@ Resources:
       - x86_64
       Environment:
         Variables:
-          DYNAMODB_TABLE_NAME:
-            Ref: AssignmentsTable
+          DYNAMODB_TABLE_NAME: AssignmentsTable
       Policies:
       - DynamoDBCrudPolicy:
-          TableName:
-            Ref: AssignmentsTable
+          TableName: AssignmentsTable
       Events:
         SaveAssignment:
           Type: Api
@@ -61,12 +46,10 @@ Resources:
       - x86_64
       Environment:
         Variables:
-          DYNAMODB_TABLE_NAME:
-            Ref: AssignmentsTable
+          DYNAMODB_TABLE_NAME: AssignmentsTable
       Policies:
       - DynamoDBReadPolicy:
-          TableName:
-            Ref: AssignmentsTable
+          TableName: AssignmentsTable
       Events:
         GetAssignments:
           Type: Api
@@ -86,7 +69,3 @@ Outputs:
       Fn::GetAtt:
       - SaveAssignmentFunction
       - Arn
-  AssignmentsTableName:
-    Description: DynamoDB table name
-    Value:
-      Ref: AssignmentsTable
