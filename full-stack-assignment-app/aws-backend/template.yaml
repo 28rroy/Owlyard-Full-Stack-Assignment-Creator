@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Assignment Creator Backend - Lambda functions that connect to manually created DynamoDB table
+  Assignment Creator Backend - Separate Lambda functions for each HTTP method
 
 Globals:
   Function:
@@ -9,12 +9,12 @@ Globals:
     Runtime: python3.9
 
 Resources:
-  # Lambda function to save assignments
+  # Lambda function to save assignments (POST)
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: assignment_functions/
-      Handler: app.lambda_handler
+      Handler: save_assignment.lambda_handler
       Runtime: python3.9
       Architectures:
         - x86_64
@@ -28,15 +28,10 @@ Resources:
         SaveAssignment:
           Type: Api
           Properties:
-            Path: /assignments
+            Path: /save-assignment
             Method: post
-        AssignmentOptions:
-          Type: Api
-          Properties:
-            Path: /assignments
-            Method: options
 
-  # Lambda function to get assignments
+  # Lambda function to get assignments (GET)
   GetAssignmentsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -55,14 +50,14 @@ Resources:
         GetAssignments:
           Type: Api
           Properties:
-            Path: /assignments
+            Path: /get-assignments
             Method: get
 
 Outputs:
-  AssignmentApi:
-    Description: "API Gateway endpoint URL for Assignment functions"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/assignments"
+  SaveAssignmentApi:
+    Description: "API Gateway endpoint URL for Save Assignment function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment"
     
-  SaveAssignmentFunction:
-    Description: "Save Assignment Lambda Function ARN"
-    Value: !GetAtt SaveAssignmentFunction.Arn
+  GetAssignmentsApi:
+    Description: "API Gateway endpoint URL for Get Assignments function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments"

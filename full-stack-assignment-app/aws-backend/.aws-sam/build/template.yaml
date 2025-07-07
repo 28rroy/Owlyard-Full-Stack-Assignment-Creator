@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 'Assignment Creator Backend - Lambda functions that connect to manually
-  created DynamoDB table
+Description: 'Assignment Creator Backend - Separate Lambda functions for each HTTP
+  method
 
   '
 Globals:
@@ -13,7 +13,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: SaveAssignmentFunction
-      Handler: app.lambda_handler
+      Handler: save_assignment.lambda_handler
       Runtime: python3.9
       Architectures:
       - x86_64
@@ -27,13 +27,8 @@ Resources:
         SaveAssignment:
           Type: Api
           Properties:
-            Path: /assignments
+            Path: /save-assignment
             Method: post
-        AssignmentOptions:
-          Type: Api
-          Properties:
-            Path: /assignments
-            Method: options
     Metadata:
       SamResourceId: SaveAssignmentFunction
   GetAssignmentsFunction:
@@ -54,18 +49,16 @@ Resources:
         GetAssignments:
           Type: Api
           Properties:
-            Path: /assignments
+            Path: /get-assignments
             Method: get
     Metadata:
       SamResourceId: GetAssignmentsFunction
 Outputs:
-  AssignmentApi:
-    Description: API Gateway endpoint URL for Assignment functions
+  SaveAssignmentApi:
+    Description: API Gateway endpoint URL for Save Assignment function
     Value:
-      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/assignments
-  SaveAssignmentFunction:
-    Description: Save Assignment Lambda Function ARN
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment
+  GetAssignmentsApi:
+    Description: API Gateway endpoint URL for Get Assignments function
     Value:
-      Fn::GetAtt:
-      - SaveAssignmentFunction
-      - Arn
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments

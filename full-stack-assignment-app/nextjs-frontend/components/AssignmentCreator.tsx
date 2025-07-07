@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Check, Pencil } from "lucide-react";
 
 type QuestionData = {
@@ -12,6 +12,7 @@ type QuestionData = {
   correctAnswers: number[];
   explanation: string;
   showExplanation: boolean;
+  points: number;
 };
 
 // JSON structure for API
@@ -21,6 +22,7 @@ interface AssignmentQuestion {
   correctOptions: number[];
   explanation: string;
   questionType: 'single' | 'multiple';
+  points: number;
 }
 
 interface AssignmentData {
@@ -36,13 +38,67 @@ const defaultQuestion = (): QuestionData => ({
   correctAnswers: [],
   explanation: "",
   showExplanation: false,
+  points: 1,
 });
 
-export const AssignmentCreator = () => {
+// Types for editing
+interface Assignment {
+  assignmentId: string;
+  title: string;
+  questions: { [key: string]: AssignmentQuestion };
+  createdAt: string;
+  totalQuestions: number;
+  status: string;
+}
+
+interface AssignmentCreatorProps {
+  editingAssignment?: Assignment | null;
+}
+
+export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps) => {
   const [questions, setQuestions] = useState<QuestionData[]>([defaultQuestion()]);
   const [numOptions, setNumOptions] = useState<number[]>([0]);
   const [assignmentTitle, setAssignmentTitle] = useState<string>("");
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+
+  // Load assignment data when editing
+  useEffect(() => {
+    if (editingAssignment) {
+      setIsEditing(true);
+      setAssignmentTitle(editingAssignment.title);
+      
+      // Convert API format back to form format
+      const formQuestions: QuestionData[] = [];
+      const optionCounts: number[] = [];
+      
+      Object.entries(editingAssignment.questions).forEach(([key, question]) => {
+        const formQuestion: QuestionData = {
+          question: question.question,
+          questionEditable: false, // Start in view mode
+          options: question.options,
+          optionsEditable: false, // Start in view mode
+          correctCount: question.correctOptions.length,
+          correctAnswers: question.correctOptions,
+          explanation: question.explanation,
+          showExplanation: question.explanation.length > 0,
+          points: question.points
+        };
+        
+        formQuestions.push(formQuestion);
+        optionCounts.push(question.options.length);
+      });
+      
+      setQuestions(formQuestions);
+      setNumOptions(optionCounts);
+    } else {
+      // Reset for new assignment
+      setIsEditing(false);
+      setAssignmentTitle("");
+      setQuestions([defaultQuestion()]);
+      setNumOptions([0]);
+    }
+  }, [editingAssignment]);
 
   const updateQuestion = (index: number, changes: Partial<QuestionData>) => {
     const updated = [...questions];
@@ -88,7 +144,8 @@ export const AssignmentCreator = () => {
           options: question.options.filter(opt => opt.trim() !== ''),
           correctOptions: question.correctAnswers.filter(answer => answer !== -1),
           explanation: question.explanation.trim(),
-          questionType: question.correctAnswers.filter(answer => answer !== -1).length > 1 ? 'multiple' : 'single'
+          questionType: question.correctAnswers.filter(answer => answer !== -1).length > 1 ? 'multiple' : 'single',
+          points: question.points
         };
       }
     });
@@ -111,20 +168,27 @@ export const AssignmentCreator = () => {
   // Save assignment to API
   const saveAssignmentToAPI = async (assignmentData: AssignmentData) => {
     try {
+      const payload = {
+        title: assignmentTitle.trim(),
+        questions: assignmentData,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          totalQuestions: Object.keys(assignmentData).length,
+          questionTypes: Object.values(assignmentData).map(q => q.questionType)
+        }
+      };
+
+      // Add assignment ID if editing
+      if (isEditing && editingAssignment) {
+        (payload as any).assignmentId = editingAssignment.assignmentId;
+      }
+
       const response = await fetch('/api/assignments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title: assignmentTitle.trim(),
-          questions: assignmentData,
-          createdAt: new Date().toISOString(),
-          metadata: {
-            totalQuestions: Object.keys(assignmentData).length,
-            questionTypes: Object.values(assignmentData).map(q => q.questionType)
-          }
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -155,7 +219,8 @@ export const AssignmentCreator = () => {
       
       const result = await saveAssignmentToAPI(assignmentJSON);
       
-      alert(`Assignment "${assignmentTitle}" saved successfully! ID: ${result.id}`);
+      const action = isEditing ? 'updated' : 'saved';
+      alert(`Assignment "${assignmentTitle}" ${action} successfully! ID: ${result.assignmentId || result.id}`);
       
       // Close the modal
       window.dispatchEvent(new Event("close-assignment-modal"));
@@ -171,7 +236,9 @@ export const AssignmentCreator = () => {
       className="h-[calc(100vh-150px)] overflow-y-auto pr-3 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
-      <h1 className="text-2xl font-bold text-teal-800 mb-4 text-center">Assignment Creator</h1>
+      <h1 className="text-2xl font-bold text-teal-800 mb-4 text-center">
+        {isEditing ? 'Edit Assignment' : 'Assignment Creator'}
+      </h1>
 
       {/* Assignment Title */}
       <div className="mb-6 p-4 bg-blue-50 rounded-md border">
@@ -224,6 +291,22 @@ export const AssignmentCreator = () => {
                 <Pencil className="h-5 w-5" />
               </button>
             )}
+          </div>
+
+          {/* Point Value */}
+          <div className="flex items-center gap-2">
+            <label className="text-teal-800 font-medium">
+              Point Value:
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={q.points}
+              onChange={(e) => updateQuestion(qIndex, { points: parseInt(e.target.value) || 1 })}
+              className="w-20 p-2 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500"
+            />
+            <span className="text-gray-600 text-sm">points</span>
           </div>
 
           {/* Number of Options */}
@@ -371,7 +454,7 @@ export const AssignmentCreator = () => {
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'
           }`}
         >
-          {isSaving ? 'Saving...' : 'Save Assignment'}
+          {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update Assignment' : 'Save Assignment')}
         </button>
       </div>
     </div>

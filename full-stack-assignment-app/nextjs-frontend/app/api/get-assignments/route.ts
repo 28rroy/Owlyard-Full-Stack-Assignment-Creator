@@ -18,7 +18,7 @@ export async function GET() {
     }
     
     // Call your Lambda function to get assignments
-    const response = await fetch(`${apiGatewayUrl}/assignments`, {
+    const response = await fetch(`${apiGatewayUrl}/get-assignments`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

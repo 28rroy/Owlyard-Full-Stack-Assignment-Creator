@@ -4,7 +4,7 @@ export async function POST(request: NextRequest) {
   try {
     const assignmentData = await request.json();
     
-    console.log('Received assignment data:', assignmentData);
+    console.log('Received assignment data:', JSON.stringify(assignmentData, null, 2));
     
     // Validate the data
     if (!assignmentData.title || !assignmentData.questions) {
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const fullUrl = `${apiGatewayUrl}/assignments`;
+    const fullUrl = `${apiGatewayUrl}/save-assignment`;
     console.log('Full URL:', fullUrl);
     
     // Call your Lambda function via API Gateway
