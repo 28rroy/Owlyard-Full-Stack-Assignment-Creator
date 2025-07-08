@@ -1,20 +1,20 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: 'Assignment Creator Backend - Separate Lambda functions for each HTTP
-  method
+Description: 'Assignment Creator Backend - Separate Node.js Lambda functions for each
+  HTTP method
 
   '
 Globals:
   Function:
     Timeout: 30
-    Runtime: python3.9
+    Runtime: nodejs20.x
 Resources:
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: SaveAssignmentFunction
-      Handler: save_assignment.lambda_handler
-      Runtime: python3.9
+      Handler: save_assignment.handler
+      Runtime: nodejs20.x
       Architectures:
       - x86_64
       Environment:
@@ -35,8 +35,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: GetAssignmentsFunction
-      Handler: get_assignments.lambda_handler
-      Runtime: python3.9
+      Handler: get_assignments.handler
+      Runtime: nodejs20.x
       Architectures:
       - x86_64
       Environment:

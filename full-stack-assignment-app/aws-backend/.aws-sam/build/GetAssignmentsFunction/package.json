@@ -1,0 +1,26 @@
+{
+  "name": "assignment-creator-lambda",
+  "version": "1.0.0",
+  "description": "Node.js Lambda functions for Assignment Creator",
+  "type": "module",
+  "main": "save_assignment.mjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.470.0",
+    "@aws-sdk/lib-dynamodb": "^3.470.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "aws",
+    "lambda",
+    "dynamodb",
+    "nodejs",
+    "assignment"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

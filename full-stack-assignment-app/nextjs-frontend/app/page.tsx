@@ -83,14 +83,14 @@ export default function Home() {
       {/* Main Buttons */}
       <div className="flex gap-4 mb-4">
         <button
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
+          className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition"
           onClick={() => setShowCreateModal(true)}
         >
-          Create Assignment
+          + Create Assignment
         </button>
         
         <button
-          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition flex items-center gap-2"
+          className="bg-orange-400 text-white px-4 py-2 rounded-md hover:bg-orange-500 transition flex items-center gap-2"
           onClick={handleViewAssignments}
         >
           <Eye className="h-4 w-4" />
@@ -161,7 +161,7 @@ export default function Home() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between p-6 border-b">
-                <h2 className="text-2xl font-bold text-gray-800">My Assignments</h2>
+                <h2 className="text-2xl font-bold text-teal-800">My Assignments</h2>
                 <button
                   onClick={() => setShowViewModal(false)}
                   className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -173,7 +173,7 @@ export default function Home() {
               <div className="p-6 overflow-y-auto max-h-[60vh]">
                 {loading ? (
                   <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
                     <p className="mt-4 text-gray-600">Loading assignments...</p>
                   </div>
                 ) : assignments.length === 0 ? (
@@ -189,7 +189,7 @@ export default function Home() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                            <h3 className="text-lg font-semibold text-teal-800 mb-2">
                               {assignment.title}
                             </h3>
                             <div className="flex flex-wrap gap-4 text-sm text-gray-600">
@@ -200,7 +200,7 @@ export default function Home() {
                           </div>
                           <button
                             onClick={() => handleEditAssignment(assignment)}
-                            className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+                            className="p-2 text-orange-400 hover:text-orange-500 hover:bg-orange-50 rounded-md transition-colors"
                             title="Edit Assignment"
                           >
                             <Pencil className="h-5 w-5" />

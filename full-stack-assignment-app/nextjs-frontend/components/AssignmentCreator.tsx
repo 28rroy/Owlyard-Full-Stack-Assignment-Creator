@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Check, Pencil } from "lucide-react";
+import { Check, Pencil, Save } from "lucide-react";
 
 type QuestionData = {
   question: string;
@@ -233,7 +233,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
 
   return (
     <div
-      className="h-[calc(100vh-150px)] overflow-y-auto pr-3 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100"
+      className="w-11/12 h-full overflow-y-auto pr-3 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100"
       style={{ WebkitOverflowScrolling: "touch" }}
     >
       <h1 className="text-2xl font-bold text-teal-800 mb-4 text-center">
@@ -247,7 +247,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
         </label>
         <input
           type="text"
-          placeholder="Enter assignment title (e.g., Math Quiz Chapter 5)"
+          placeholder="Enter assignment title"
           value={assignmentTitle}
           onChange={(e) => setAssignmentTitle(e.target.value)}
           className="w-full p-3 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500"
@@ -260,7 +260,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           key={qIndex}
           className="space-y-4 border border-gray-200 p-4 rounded-md bg-white shadow-sm mb-6"
         >
-          <h2 className="text-xl font-semibold text-indigo-800">Question {qIndex + 1}</h2>
+          <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
 
           {/* Question Input */}
           <div className="flex items-center gap-2">
@@ -420,9 +420,9 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           <div>
             <button
               onClick={() => updateQuestion(qIndex, { showExplanation: true })}
-              className="mt-4 bg-purple-600 text-white px-3 py-2 rounded-md hover:bg-purple-700 transition"
+              className="mt-4 bg-orange-400 text-white px-3 py-2 rounded-md hover:bg-orange-500 transition"
             >
-              Add Explanation
+              + Add Explanation
             </button>
             {q.showExplanation && (
               <textarea
@@ -438,23 +438,24 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
       ))}
 
       {/* Add Question + Save Buttons */}
-      <div className="flex justify-center gap-4 mt-6">
+      <div className="flex justify-between gap-4 mt-6">
         <button
           onClick={handleNextQuestion}
-          className="bg-blue-700 text-white px-4 py-2 rounded hover:bg-blue-800 transition"
+          className="bg-red-400 text-white px-4 py-2 rounded hover:bg-red-500 transition"
         >
-          Next Question
+          + Add Question
         </button>
         <button
           onClick={handleSaveAssignment}
           disabled={!isAssignmentValid() || isSaving}
-          className={`px-4 py-2 rounded transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded transition ${
             isAssignmentValid() && !isSaving
-              ? 'bg-green-600 text-white hover:bg-green-700'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              ? 'bg-teal-600 text-white hover:bg-teal-700'
+              : 'bg-teal-600 text-white cursor-not-allowed'
           }`}
         >
-          {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update Assignment' : 'Save Assignment')}
+          <Save size={20}/>
+          {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
         </button>
       </div>
     </div>
