@@ -21,7 +21,6 @@ interface AssignmentQuestion {
   options: string[];
   correctOptions: number[];
   explanation: string;
-  questionType: 'single' | 'multiple';
   points: number;
 }
 
@@ -100,6 +99,11 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     }
   }, [editingAssignment]);
 
+  // Validation constants
+  const MAX_QUESTION_LENGTH = 1000;
+  const MAX_OPTION_LENGTH = 500;
+  const MAX_QUESTIONS = 100;
+
   const updateQuestion = (index: number, changes: Partial<QuestionData>) => {
     const updated = [...questions];
     updated[index] = { ...updated[index], ...changes };
@@ -126,6 +130,10 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
   };
 
   const handleNextQuestion = () => {
+    if (questions.length >= MAX_QUESTIONS) {
+      alert(`Maximum ${MAX_QUESTIONS} questions allowed.`);
+      return;
+    }
     setQuestions((prev) => [...prev, defaultQuestion()]);
     setNumOptions((prev) => [...prev, 0]);
   };
@@ -144,7 +152,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           options: question.options.filter(opt => opt.trim() !== ''),
           correctOptions: question.correctAnswers.filter(answer => answer !== -1),
           explanation: question.explanation.trim(),
-          questionType: question.correctAnswers.filter(answer => answer !== -1).length > 1 ? 'multiple' : 'single',
           points: question.points
         };
       }
@@ -153,14 +160,15 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     return assignmentData;
   };
 
-  // Validation function
+  // Enhanced validation function
   const isAssignmentValid = (): boolean => {
     if (!assignmentTitle.trim()) return false;
     
     return questions.some(q => {
       return q.question.trim() !== '' && 
+             q.question.length <= MAX_QUESTION_LENGTH &&
              q.options.length > 0 && 
-             q.options.some(opt => opt.trim() !== '') &&
+             q.options.some(opt => opt.trim() !== '' && opt.length <= MAX_OPTION_LENGTH) &&
              q.correctAnswers.some(answer => answer !== -1);
     });
   };
@@ -173,8 +181,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
         questions: assignmentData,
         createdAt: new Date().toISOString(),
         metadata: {
-          totalQuestions: Object.keys(assignmentData).length,
-          questionTypes: Object.values(assignmentData).map(q => q.questionType)
+          totalQuestions: Object.keys(assignmentData).length
         }
       };
 
@@ -196,16 +203,38 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
       }
 
       const result = await response.json();
-      console.log('Assignment saved successfully:', result);
+      // console.log('Assignment saved successfully:', result);
       return result;
     } catch (error) {
-      console.error('Error saving assignment:', error);
+      // console.error('Error saving assignment:', error);
       throw error;
     }
   };
 
-  // Handle save assignment
+  // Handle save assignment with validation
   const handleSaveAssignment = async () => {
+    // Check question limits
+    if (questions.length > MAX_QUESTIONS) {
+      alert(`Maximum ${MAX_QUESTIONS} questions allowed.`);
+      return;
+    }
+
+    // Check question length limits
+    for (let i = 0; i < questions.length; i++) {
+      const q = questions[i];
+      if (q.question.length > MAX_QUESTION_LENGTH) {
+        alert(`Question ${i + 1} exceeds maximum length of ${MAX_QUESTION_LENGTH} characters.`);
+        return;
+      }
+      
+      for (let j = 0; j < q.options.length; j++) {
+        if (q.options[j].length > MAX_OPTION_LENGTH) {
+          alert(`Question ${i + 1}, Option ${j + 1} exceeds maximum length of ${MAX_OPTION_LENGTH} characters.`);
+          return;
+        }
+      }
+    }
+
     if (!isAssignmentValid()) {
       alert('Please fill in the assignment title and at least one complete question.');
       return;
@@ -215,7 +244,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     
     try {
       const assignmentJSON = convertToAssignmentJSON(questions);
-      console.log('Converting to JSON:', JSON.stringify(assignmentJSON, null, 2));
+      // console.log('Converting to JSON:', JSON.stringify(assignmentJSON, null, 2));
       
       const result = await saveAssignmentToAPI(assignmentJSON);
       
@@ -264,16 +293,26 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
 
           {/* Question Input */}
           <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Enter question"
-              value={q.question}
-              onChange={(e) => updateQuestion(qIndex, { question: e.target.value })}
-              readOnly={!q.questionEditable}
-              className={`w-full p-2 border rounded-md text-gray-800 ${
-                !q.questionEditable ? "bg-gray-100" : ""
-              }`}
-            />
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Enter question"
+                value={q.question}
+                onChange={(e) => {
+                  if (e.target.value.length <= MAX_QUESTION_LENGTH) {
+                    updateQuestion(qIndex, { question: e.target.value });
+                  }
+                }}
+                readOnly={!q.questionEditable}
+                className={`w-full p-2 border rounded-md text-gray-800 ${
+                  !q.questionEditable ? "bg-gray-100" : ""
+                }`}
+                maxLength={MAX_QUESTION_LENGTH}
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                {q.question.length}/{MAX_QUESTION_LENGTH} characters
+              </div>
+            </div>
             {q.questionEditable ? (
               <button 
                 onClick={() => updateQuestion(qIndex, { questionEditable: false })} 
@@ -352,17 +391,26 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
 
           {/* Options */}
           {q.options.map((opt, i) => (
-            <input
-              key={i}
-              type="text"
-              value={opt}
-              readOnly={!q.optionsEditable}
-              onChange={(e) => handleOptionChange(qIndex, i, e.target.value)}
-              placeholder={`Option ${i + 1}`}
-              className={`w-full p-2 border rounded-md mt-2 text-gray-900 ${
-                !q.optionsEditable ? "bg-gray-100" : ""
-              }`}
-            />
+            <div key={i}>
+              <input
+                type="text"
+                value={opt}
+                readOnly={!q.optionsEditable}
+                onChange={(e) => {
+                  if (e.target.value.length <= MAX_OPTION_LENGTH) {
+                    handleOptionChange(qIndex, i, e.target.value);
+                  }
+                }}
+                placeholder={`Option ${i + 1}`}
+                className={`w-full p-2 border rounded-md mt-2 text-gray-900 ${
+                  !q.optionsEditable ? "bg-gray-100" : ""
+                }`}
+                maxLength={MAX_OPTION_LENGTH}
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                {opt.length}/{MAX_OPTION_LENGTH} characters
+              </div>
+            </div>
           ))}
 
           {/* Correct Answer Count and Selection */}
@@ -441,9 +489,14 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
       <div className="flex justify-between gap-4 mt-6">
         <button
           onClick={handleNextQuestion}
-          className="bg-red-400 text-white px-4 py-2 rounded hover:bg-red-500 transition"
+          disabled={questions.length >= MAX_QUESTIONS}
+          className={`px-4 py-2 rounded transition ${
+            questions.length >= MAX_QUESTIONS
+              ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+              : 'bg-red-400 text-white hover:bg-red-500'
+          }`}
         >
-          + Add Question
+          + Add Question ({questions.length}/{MAX_QUESTIONS})
         </button>
         <button
           onClick={handleSaveAssignment}

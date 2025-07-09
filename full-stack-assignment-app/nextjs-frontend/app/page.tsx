@@ -10,7 +10,6 @@ interface AssignmentQuestion {
   options: string[];
   correctOptions: number[];
   explanation: string;
-  questionType: 'single' | 'multiple';
   points: number;
 }
 
@@ -49,11 +48,11 @@ export default function Home() {
         const data = await response.json();
         setAssignments(data.assignments || []);
       } else {
-        console.error('Failed to fetch assignments');
+        // console.error('Failed to fetch assignments');
         setAssignments([]);
       }
     } catch (error) {
-      console.error('Error fetching assignments:', error);
+      // console.error('Error fetching assignments:', error);
       setAssignments([]);
     } finally {
       setLoading(false);

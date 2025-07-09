@@ -6,6 +6,11 @@ import { randomUUID } from "crypto";
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
 
+// Validation constants
+const MAX_QUESTION_LENGTH = 1000;
+const MAX_OPTION_LENGTH = 500;
+const MAX_QUESTIONS = 100;
+
 export const handler = async (event) => {
     // CORS headers
     const corsHeaders = {
@@ -62,6 +67,45 @@ export const handler = async (event) => {
         const questions = body.questions;
         const createdAt = body.createdAt || new Date().toISOString();
         const metadata = body.metadata || {};
+        
+        // Server-side validation
+        const questionCount = Object.keys(questions).length;
+        if (questionCount > MAX_QUESTIONS) {
+            return {
+                statusCode: 400,
+                headers: corsHeaders,
+                body: JSON.stringify({ 
+                    error: `Maximum ${MAX_QUESTIONS} questions allowed. Received ${questionCount} questions.` 
+                })
+            };
+        }
+        
+        // Validate each question and option length
+        for (const [questionKey, questionData] of Object.entries(questions)) {
+            if (questionData.question && questionData.question.length > MAX_QUESTION_LENGTH) {
+                return {
+                    statusCode: 400,
+                    headers: corsHeaders,
+                    body: JSON.stringify({ 
+                        error: `Question ${questionKey} exceeds maximum length of ${MAX_QUESTION_LENGTH} characters.` 
+                    })
+                };
+            }
+            
+            if (questionData.options && Array.isArray(questionData.options)) {
+                for (let i = 0; i < questionData.options.length; i++) {
+                    if (questionData.options[i] && questionData.options[i].length > MAX_OPTION_LENGTH) {
+                        return {
+                            statusCode: 400,
+                            headers: corsHeaders,
+                            body: JSON.stringify({ 
+                                error: `Question ${questionKey}, Option ${i + 1} exceeds maximum length of ${MAX_OPTION_LENGTH} characters.` 
+                            })
+                        };
+                    }
+                }
+            }
+        }
         
         // Generate unique assignment ID or use existing one for updates
         const assignmentId = body.assignmentId || randomUUID();
