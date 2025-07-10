@@ -1,10 +1,12 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { randomUUID } from "crypto";
 
-// Initialize DynamoDB client
-const client = new DynamoDBClient({});
-const dynamodb = DynamoDBDocumentClient.from(client);
+// Initialize AWS clients
+const dynamoClient = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
+const s3Client = new S3Client({});
 
 // Validation constants
 const MAX_QUESTION_LENGTH = 1000;
@@ -125,12 +127,39 @@ export const handler = async (event) => {
         const tableName = process.env.DYNAMODB_TABLE_NAME || 'AssignmentsTable';
         
         // Save to DynamoDB
-        const command = new PutCommand({
+        const dynamoCommand = new PutCommand({
             TableName: tableName,
             Item: assignmentItem
         });
         
-        await dynamodb.send(command);
+        await dynamodb.send(dynamoCommand);
+        
+        // Save to S3 as .quiz file
+        const bucketName = process.env.S3_BUCKET_NAME;
+        if (bucketName) {
+            try {
+                const quizFileName = `assignment/${assignmentId}.quiz`;
+                const quizFileContent = JSON.stringify(assignmentItem, null, 2);
+                
+                const s3Command = new PutObjectCommand({
+                    Bucket: bucketName,
+                    Key: quizFileName,
+                    Body: quizFileContent,
+                    ContentType: 'application/json',
+                    Metadata: {
+                        'assignment-id': assignmentId,
+                        'created-at': createdAt,
+                        'total-questions': Object.keys(questions).length.toString()
+                    }
+                });
+                
+                await s3Client.send(s3Command);
+                console.log(`Quiz file saved to S3: ${quizFileName}`);
+            } catch (s3Error) {
+                console.error('Error saving to S3:', s3Error);
+                // Continue execution - S3 save is optional
+            }
+        }
         
         // Log successful save
         console.log(`Assignment saved successfully: ${assignmentId}`);

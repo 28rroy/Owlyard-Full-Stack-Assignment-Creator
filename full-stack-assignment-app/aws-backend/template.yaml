@@ -3,6 +3,12 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Assignment Creator Backend - Separate Node.js Lambda functions for each HTTP method
 
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: "Name of the S3 bucket to store .quiz files"
+    Default: "assignment-creator-quiz-files"
+
 Globals:
   Function:
     Timeout: 30
@@ -21,9 +27,12 @@ Resources:
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: AssignmentsTable
+          S3_BUCKET_NAME: !Ref S3BucketName
       Policies:
         - DynamoDBCrudPolicy:
             TableName: AssignmentsTable
+        - S3WritePolicy:
+            BucketName: !Ref S3BucketName
       Events:
         SaveAssignment:
           Type: Api
