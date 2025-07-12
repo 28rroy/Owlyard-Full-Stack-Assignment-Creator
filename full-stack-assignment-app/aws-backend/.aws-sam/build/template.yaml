@@ -22,16 +22,14 @@ Resources:
       Runtime: nodejs20.x
       Architectures:
       - x86_64
+      Role:
+        Fn::GetAtt:
+        - SaveAssignmentExecutionRole
+        - Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: AssignmentsTable
           S3_BUCKET_NAME:
-            Ref: S3BucketName
-      Policies:
-      - DynamoDBCrudPolicy:
-          TableName: AssignmentsTable
-      - S3WritePolicy:
-          BucketName:
             Ref: S3BucketName
       Events:
         SaveAssignment:
@@ -49,12 +47,13 @@ Resources:
       Runtime: nodejs20.x
       Architectures:
       - x86_64
+      Role:
+        Fn::GetAtt:
+        - GetAssignmentsExecutionRole
+        - Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: AssignmentsTable
-      Policies:
-      - DynamoDBReadPolicy:
-          TableName: AssignmentsTable
       Events:
         GetAssignments:
           Type: Api
@@ -63,6 +62,80 @@ Resources:
             Method: get
     Metadata:
       SamResourceId: GetAssignmentsFunction
+  SaveAssignmentExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: SaveAssignmentPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+          - Effect: Allow
+            Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            Resource:
+              Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/AssignmentsTable
+          - Effect: Allow
+            Action:
+            - s3:PutObject
+            - s3:PutObjectAcl
+            Resource:
+              Fn::Sub: arn:aws:s3:::${S3BucketName}/assignment/*
+  GetAssignmentsExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: GetAssignmentsPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+          - Effect: Allow
+            Action:
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            Resource:
+              Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/AssignmentsTable
+  SaveAssignmentFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${SaveAssignmentFunction}
+      RetentionInDays: 30
+  GetAssignmentFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${GetAssignmentsFunction}
+      RetentionInDays: 30
 Outputs:
   SaveAssignmentApi:
     Description: API Gateway endpoint URL for Save Assignment function
