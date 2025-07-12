@@ -14,6 +14,16 @@ Globals:
     Timeout: 30
     Runtime: nodejs20.x
 Resources:
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      EndpointConfiguration:
+        Type: REGIONAL
+      Cors:
+        AllowMethods: '''DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'''
+        AllowHeaders: '''Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'''
+        AllowOrigin: '''*'''
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -35,6 +45,8 @@ Resources:
         SaveAssignment:
           Type: Api
           Properties:
+            RestApiId:
+              Ref: ApiGateway
             Path: /save-assignment
             Method: post
     Metadata:
@@ -58,6 +70,8 @@ Resources:
         GetAssignments:
           Type: Api
           Properties:
+            RestApiId:
+              Ref: ApiGateway
             Path: /get-assignments
             Method: get
     Metadata:
@@ -137,11 +151,15 @@ Resources:
         Fn::Sub: /aws/lambda/${GetAssignmentsFunction}
       RetentionInDays: 30
 Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod
   SaveAssignmentApi:
     Description: API Gateway endpoint URL for Save Assignment function
     Value:
-      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment
+      Fn::Sub: https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment
   GetAssignmentsApi:
     Description: API Gateway endpoint URL for Get Assignments function
     Value:
-      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments
+      Fn::Sub: https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments

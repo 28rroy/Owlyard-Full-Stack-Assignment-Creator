@@ -2,7 +2,7 @@
 
 const nextConfig: NextConfig = {
   env: {
-    NEXT_PUBLIC_API_GATEWAY_URL: 'https://r9feqlnw1d.execute-api.us-east-2.amazonaws.com/Prod'
+    NEXT_PUBLIC_API_GATEWAY_URL: 'https://19d9gmww1j.execute-api.us-east-2.amazonaws.com/Prod'
   }
 }
 

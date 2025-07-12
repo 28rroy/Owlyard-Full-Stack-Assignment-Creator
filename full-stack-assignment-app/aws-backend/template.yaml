@@ -15,6 +15,20 @@ Globals:
     Runtime: nodejs20.x
 
 Resources:
+  #################################################
+  # API Gateway definition
+  #################################################
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      EndpointConfiguration:
+        Type: REGIONAL
+      Cors:
+        AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+
   # Lambda function to save assignments (POST)
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
@@ -33,6 +47,7 @@ Resources:
         SaveAssignment:
           Type: Api
           Properties:
+            RestApiId: !Ref ApiGateway
             Path: /save-assignment
             Method: post
 
@@ -53,6 +68,7 @@ Resources:
         GetAssignments:
           Type: Api
           Properties:
+            RestApiId: !Ref ApiGateway
             Path: /get-assignments
             Method: get
 
@@ -139,10 +155,14 @@ Resources:
       RetentionInDays: 30
 
 Outputs:
+  ApiUrl:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+    
   SaveAssignmentApi:
     Description: "API Gateway endpoint URL for Save Assignment function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment"
     
   GetAssignmentsApi:
     Description: "API Gateway endpoint URL for Get Assignments function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments"
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments"
