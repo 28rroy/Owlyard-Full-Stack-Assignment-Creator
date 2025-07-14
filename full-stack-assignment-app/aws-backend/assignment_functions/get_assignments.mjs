@@ -6,16 +6,18 @@ const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
 
 export const handler = async (event) => {
-    // CORS headers
+    // CORS headers (for error responses)
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Amz-Date, X-Api-Key, X-Amz-Security-Token',
         'Content-Type': 'application/json'
     };
     
     try {
-        // Only allow GET requests
+        console.log('Event received:', JSON.stringify(event, null, 2));
+        
+        // Only allow GET requests (OPTIONS handled by API Gateway)
         if (event.httpMethod !== 'GET') {
             return {
                 statusCode: 405,
@@ -26,6 +28,7 @@ export const handler = async (event) => {
         
         // Get DynamoDB table name from environment variable
         const tableName = process.env.DYNAMODB_TABLE_NAME || 'AssignmentsTable';
+        console.log('Using table:', tableName);
         
         // Check if specific assignment ID is requested
         let assignmentId = null;
@@ -35,6 +38,7 @@ export const handler = async (event) => {
         
         if (assignmentId) {
             // Get specific assignment
+            console.log('Getting specific assignment:', assignmentId);
             const command = new GetCommand({
                 TableName: tableName,
                 Key: { assignmentId: assignmentId }
@@ -60,12 +64,15 @@ export const handler = async (event) => {
             };
         } else {
             // Get all assignments (scan - use with caution in production)
+            console.log('Getting all assignments from table:', tableName);
             const command = new ScanCommand({
                 TableName: tableName
             });
             
             const response = await dynamodb.send(command);
             const assignments = response.Items || [];
+            
+            console.log('Found assignments:', assignments.length);
             
             // Sort by creation date (newest first)
             assignments.sort((a, b) => {
@@ -86,9 +93,10 @@ export const handler = async (event) => {
         }
         
     } catch (error) {
-        // Log the error
+        // Log the error for debugging
         console.error('Error retrieving assignments:', error);
         console.error('Event:', JSON.stringify(event));
+        console.error('Error stack:', error.stack);
         
         // Return error response
         return {
@@ -97,7 +105,8 @@ export const handler = async (event) => {
             body: JSON.stringify({
                 success: false,
                 error: 'Internal server error',
-                message: error.message
+                message: error.message,
+                details: error.stack
             })
         };
     }

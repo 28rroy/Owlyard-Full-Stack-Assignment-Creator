@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Assignment Creator Backend - Separate Node.js Lambda functions for each HTTP method
+  Assignment Creator Backend - Working version without conflicting log groups
 
 Parameters:
   S3BucketName:
@@ -13,22 +13,13 @@ Globals:
   Function:
     Timeout: 30
     Runtime: nodejs20.x
+  Api:
+    Cors:
+      AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+      AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
 
 Resources:
-  #################################################
-  # API Gateway definition
-  #################################################
-  ApiGateway:
-    Type: AWS::Serverless::Api
-    Properties:
-      StageName: Prod
-      EndpointConfiguration:
-        Type: REGIONAL
-      Cors:
-        AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
-        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigin: "'*'"
-
   # Lambda function to save assignments (POST)
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
@@ -38,7 +29,22 @@ Resources:
       Runtime: nodejs20.x
       Architectures:
         - x86_64
-      Role: !GetAtt SaveAssignmentExecutionRole.Arn
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: AssignmentsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+              Resource: !Sub "arn:aws:s3:::${S3BucketName}/assignment/*"
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: AssignmentsTable
@@ -47,9 +53,13 @@ Resources:
         SaveAssignment:
           Type: Api
           Properties:
-            RestApiId: !Ref ApiGateway
             Path: /save-assignment
             Method: post
+        SaveAssignmentOptions:
+          Type: Api
+          Properties:
+            Path: /save-assignment
+            Method: options
 
   # Lambda function to get assignments (GET)
   GetAssignmentsFunction:
@@ -60,7 +70,17 @@ Resources:
       Runtime: nodejs20.x
       Architectures:
         - x86_64
-      Role: !GetAtt GetAssignmentsExecutionRole.Arn
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: AssignmentsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: AssignmentsTable
@@ -68,101 +88,23 @@ Resources:
         GetAssignments:
           Type: Api
           Properties:
-            RestApiId: !Ref ApiGateway
             Path: /get-assignments
             Method: get
-
-  #################################################
-  # IAM Role for Save Assignment Lambda function
-  #################################################
-  SaveAssignmentExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: SaveAssignmentPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: 
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
-              - Effect: Allow
-                Action:
-                  - dynamodb:PutItem
-                  - dynamodb:GetItem
-                Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/AssignmentsTable"
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:PutObjectAcl
-                Resource: !Sub "arn:aws:s3:::${S3BucketName}/assignment/*"
-
-  #################################################
-  # IAM Role for Get Assignments Lambda function
-  #################################################
-  GetAssignmentsExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: GetAssignmentsPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: 
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
-              - Effect: Allow
-                Action:
-                  - dynamodb:Scan
-                  - dynamodb:GetItem
-                Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/AssignmentsTable"
-
-  #################################################
-  # Log Groups for Lambda functions
-  #################################################
-  SaveAssignmentFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${SaveAssignmentFunction}"
-      RetentionInDays: 30
-
-  GetAssignmentFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${GetAssignmentsFunction}"
-      RetentionInDays: 30
+        GetAssignmentsOptions:
+          Type: Api
+          Properties:
+            Path: /get-assignments
+            Method: options
 
 Outputs:
   ApiUrl:
     Description: "API Gateway endpoint URL"
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
     
   SaveAssignmentApi:
     Description: "API Gateway endpoint URL for Save Assignment function"
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment"
     
   GetAssignmentsApi:
     Description: "API Gateway endpoint URL for Get Assignments function"
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments"

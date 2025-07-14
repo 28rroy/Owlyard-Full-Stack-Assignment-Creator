@@ -17,21 +17,58 @@ export async function GET() {
       );
     }
     
+    const fullUrl = `${apiGatewayUrl}/get-assignments`;
+    console.log('Making request to:', fullUrl);
+    
     // Call your Lambda function to get assignments
-    const response = await fetch(`${apiGatewayUrl}/get-assignments`, {
+    const response = await fetch(fullUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
     });
 
-    console.log('GET Response status:', response.status);
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
-    const result = await response.json();
-    console.log('GET Response body:', result);
+    // Get the response text first to see raw response
+    const responseText = await response.text();
+    console.log('Raw response body:', responseText);
+
+    // Try to parse as JSON
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse response as JSON:', parseError);
+      return NextResponse.json(
+        { 
+          error: 'Invalid JSON response from server',
+          details: responseText,
+          status: response.status
+        },
+        { status: 500 }
+      );
+    }
+
+    console.log('Parsed response:', result);
 
     if (!response.ok) {
-      throw new Error(result.error || result.message || 'Failed to get assignments');
+      console.error('API response not ok:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: result
+      });
+      
+      return NextResponse.json(
+        { 
+          error: 'Server error',
+          details: result,
+          status: response.status,
+          statusText: response.statusText
+        },
+        { status: response.status }
+      );
     }
 
     return NextResponse.json(result);
@@ -45,7 +82,8 @@ export async function GET() {
     return NextResponse.json(
       { 
         error: errorMessage,
-        apiUrl: process.env.NEXT_PUBLIC_API_GATEWAY_URL
+        apiUrl: process.env.NEXT_PUBLIC_API_GATEWAY_URL,
+        stack: error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     );
