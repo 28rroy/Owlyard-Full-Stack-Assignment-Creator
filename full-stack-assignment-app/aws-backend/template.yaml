@@ -1,7 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  Assignment Creator Backend - With explicit API Gateway definition
+Description: Assignment Creator Backend - Working version
 
 Parameters:
   S3BucketName:
@@ -13,119 +12,19 @@ Globals:
   Function:
     Timeout: 30
     Runtime: nodejs20.x
+  Api:
+    Cors:
+      AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+      AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"
 
 Resources:
-  #################################################
-  # Explicit API Gateway definition
-  #################################################
-  ApiGateway:
-    Type: AWS::Serverless::Api
-    Properties:
-      StageName: Prod
-      EndpointConfiguration:
-        Type: REGIONAL
-      Cors:
-        AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
-        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigin: "'*'"
-      DefinitionBody:
-        openapi: "3.0.1"
-        info:
-          title: "Assignment-Creator-API"
-          version: "1.0"
-        paths:
-          /save-assignment:
-            # ----- POST -----
-            post:
-              summary: "Save assignment to DynamoDB and S3"
-              operationId: "saveAssignment"
-              responses:
-                '200':
-                  description: "Successful response"
-              x-amazon-apigateway-integration:
-                httpMethod: "POST"
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SaveAssignmentFunctionV2.Arn}/invocations"
-                passthroughBehavior: "when_no_match"
-                type: "aws_proxy"
-            # ----- OPTIONS -----
-            options:
-              summary: "CORS preflight for /save-assignment"
-              operationId: "optionsSaveAssignment"
-              responses:
-                '200':
-                  description: "CORS response"
-                  headers:
-                    Access-Control-Allow-Origin:
-                      schema:
-                        type: string
-                    Access-Control-Allow-Methods:
-                      schema:
-                        type: string
-                    Access-Control-Allow-Headers:
-                      schema:
-                        type: string
-              x-amazon-apigateway-integration:
-                type: "mock"
-                requestTemplates:
-                  application/json: '{"statusCode": 200}'
-                responses:
-                  default:
-                    statusCode: "200"
-                    responseParameters:
-                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
-                      method.response.header.Access-Control-Allow-Origin: "'*'"
-          /get-assignments:
-            # ----- GET -----
-            get:
-              summary: "Get assignments from DynamoDB"
-              operationId: "getAssignments"
-              responses:
-                '200':
-                  description: "Successful response"
-              x-amazon-apigateway-integration:
-                httpMethod: "POST"
-                uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetAssignmentsFunctionV2.Arn}/invocations"
-                passthroughBehavior: "when_no_match"
-                type: "aws_proxy"
-            # ----- OPTIONS -----
-            options:
-              summary: "CORS preflight for /get-assignments"
-              operationId: "optionsGetAssignments"
-              responses:
-                '200':
-                  description: "CORS response"
-                  headers:
-                    Access-Control-Allow-Origin:
-                      schema:
-                        type: string
-                    Access-Control-Allow-Methods:
-                      schema:
-                        type: string
-                    Access-Control-Allow-Headers:
-                      schema:
-                        type: string
-              x-amazon-apigateway-integration:
-                type: "mock"
-                requestTemplates:
-                  application/json: '{"statusCode": 200}'
-                responses:
-                  default:
-                    statusCode: "200"
-                    responseParameters:
-                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
-                      method.response.header.Access-Control-Allow-Origin: "'*'"
-
   # Lambda function to save assignments (POST)
-  SaveAssignmentFunctionV2:
+  SaveAssignmentFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: assignment_functions/
       Handler: save_assignment.handler
-      Runtime: nodejs20.x
-      Architectures:
-        - x86_64
       Policies:
         - DynamoDBWritePolicy:
             TableName: AssignmentsTable
@@ -136,69 +35,90 @@ Resources:
                 - s3:PutObject
                 - s3:PutObjectAcl
               Resource: !Sub "arn:aws:s3:::${S3BucketName}/assignment/*"
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: AssignmentsTable
           S3_BUCKET_NAME: !Ref S3BucketName
+      Events:
+        SaveAssignment:
+          Type: Api
+          Properties:
+            Path: /save-assignment
+            Method: post
+        SaveAssignmentOptions:
+          Type: Api
+          Properties:
+            Path: /save-assignment
+            Method: options
 
   # Lambda function to get assignments (GET)
-  GetAssignmentsFunctionV2:
+  GetAssignmentsFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: assignment_functions/
       Handler: get_assignments.handler
-      Runtime: nodejs20.x
-      Architectures:
-        - x86_64
       Policies:
         - DynamoDBReadPolicy:
             TableName: AssignmentsTable
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: AssignmentsTable
+      Events:
+        GetAssignments:
+          Type: Api
+          Properties:
+            Path: /get-assignments
+            Method: get
+        GetAssignmentsOptions:
+          Type: Api
+          Properties:
+            Path: /get-assignments
+            Method: options
 
-  #################################################
-  # Lambda Invoke Permissions for Custom API Gateway
-  #################################################
-  SaveAssignmentInvokePermission:
-    Type: AWS::Lambda::Permission
+  # Lambda function for assignment responses
+  AssignmentResponsesFunction:
+    Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Ref SaveAssignmentFunctionV2
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*"
-
-  GetAssignmentsInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref GetAssignmentsFunctionV2
-      Action: lambda:InvokeFunction
-      Principal: apigateway.amazonaws.com
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*"
+      CodeUri: assignment_functions/
+      Handler: assignment_responses.handler
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: AssignmentsTable
+        - DynamoDBReadPolicy:
+            TableName: AssignmentsTable
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: AssignmentsTable
+      Events:
+        AssignmentResponsesPost:
+          Type: Api
+          Properties:
+            Path: /assignment-responses
+            Method: post
+        AssignmentResponsesGet:
+          Type: Api
+          Properties:
+            Path: /assignment-responses
+            Method: get
+        AssignmentResponsesOptions:
+          Type: Api
+          Properties:
+            Path: /assignment-responses
+            Method: options
 
 Outputs:
   ApiUrl:
     Description: "API Gateway endpoint URL"
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
     
   SaveAssignmentApi:
     Description: "API Gateway endpoint URL for Save Assignment function"
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-assignment"
     
   GetAssignmentsApi:
     Description: "API Gateway endpoint URL for Get Assignments function"
-    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments"
+
+  AssignmentResponsesApi:
+    Description: "API Gateway endpoint URL for Assignment Responses function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/assignment-responses"

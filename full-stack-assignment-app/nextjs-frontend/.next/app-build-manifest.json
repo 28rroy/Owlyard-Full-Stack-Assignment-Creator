@@ -16,10 +16,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/get-assignments/route.js"
     ],
-    "/api/assignments/route": [
+    "/api/assignment-responses/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/api/assignments/route.js"
+      "static/chunks/app/api/assignment-responses/route.js"
     ]
   }
 }
