@@ -1,6 +1,3 @@
 {
-  "/api/get-assignments/route": "app/api/get-assignments/route.js",
-  "/api/assignment-responses/route": "app/api/assignment-responses/route.js",
-  "/api/assignments/route": "app/api/assignments/route.js",
   "/page": "app/page.js"
 }

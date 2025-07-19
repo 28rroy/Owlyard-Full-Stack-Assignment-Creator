@@ -94,6 +94,9 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           correctAnswers: question.correctOptions,
           explanation: question.explanation,
           showExplanation: question.explanation.length > 0,
+          showQuestionPreview: false,      // ADD THIS LINE
+          showOptionPreviews: [],          // ADD THIS LINE  
+          showExplanationPreview: false,   // ADD THIS LINE
           points: question.points
         };
         

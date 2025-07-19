@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { HelpCircle, X, Eye } from 'lucide-react';
+import { HelpCircle, X } from 'lucide-react';
 import { MathJax } from '@/components/MathJax';
 
 export const LatexHelp = () => {
@@ -75,8 +75,8 @@ export const LatexHelp = () => {
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
             <h3 className="font-medium text-blue-800 mb-2">Quick Start:</h3>
             <ul className="text-sm text-blue-700 space-y-1">
-              <li>• Use <code className="bg-blue-100 px-1 rounded">$...$</code> for inline math: $x^2$</li>
-              <li>• Use <code className="bg-blue-100 px-1 rounded">$$...$$</code> for display math (centered on new line)</li>
+              <li>• Use <code className="bg-white text-gray-800 px-1 rounded border">$...$</code> for inline math: $x^2$</li>
+              <li>• Use <code className="bg-white text-gray-800 px-1 rounded border">$$...$$</code> for display math (centered on new line)</li>
               <li>• Click the "Show Preview" button to see how your LaTeX will render</li>
             </ul>
           </div>
@@ -89,14 +89,14 @@ export const LatexHelp = () => {
                   {category.items.map((item, itemIndex) => (
                     <div key={itemIndex} className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <code className="text-sm bg-gray-100 px-2 py-1 rounded font-mono">
+                        <code className="text-sm bg-white text-gray-800 px-2 py-1 rounded font-mono border">
                           {item.latex}
                         </code>
                         <span className="text-sm text-gray-600">{item.description}</span>
                       </div>
-                      <div className="p-2 bg-gray-50 border border-gray-200 rounded">
+                      <div className="p-2 bg-white border border-gray-200 rounded">
                         <div className="text-sm text-gray-500 mb-1">Renders as:</div>
-                        <MathJax>{item.latex}</MathJax>
+                        <MathJax className="text-gray-900">{item.latex}</MathJax>
                       </div>
                     </div>
                   ))}
@@ -108,9 +108,9 @@ export const LatexHelp = () => {
           <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
             <h3 className="font-medium text-yellow-800 mb-2">Tips:</h3>
             <ul className="text-sm text-yellow-700 space-y-1">
-              <li>• Use curly braces <code className="bg-yellow-100 px-1 rounded">{"{}"}</code> to group expressions: <code className="bg-yellow-100 px-1 rounded">$x^{"{2y}"}$</code> vs <code className="bg-yellow-100 px-1 rounded">$x^2y$</code></li>
-              <li>• Escape special characters with backslash: <code className="bg-yellow-100 px-1 rounded">$\\%$</code> for %</li>
-              <li>• Use spaces in LaTeX code for readability: <code className="bg-yellow-100 px-1 rounded">$x + y = z$</code></li>
+              <li>• Use curly braces <code className="bg-white text-gray-800 px-1 rounded border">{`{}`}</code> to group expressions: <code className="bg-white text-gray-800 px-1 rounded border">{`$x^{2y}$`}</code> vs <code className="bg-white text-gray-800 px-1 rounded border">$x^2y$</code></li>
+              <li>• Escape special characters with backslash: <code className="bg-white text-gray-800 px-1 rounded border">$\\%$</code> for %</li>
+              <li>• Use spaces in LaTeX code for readability: <code className="bg-white text-gray-800 px-1 rounded border">$x + y = z$</code></li>
               <li>• Preview your work before saving to ensure correct rendering</li>
             </ul>
           </div>
@@ -118,15 +118,15 @@ export const LatexHelp = () => {
           <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-md">
             <h3 className="font-medium text-green-800 mb-2">Common Operators:</h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
-              <div><code className="bg-green-100 px-1 rounded">+</code> → +</div>
-              <div><code className="bg-green-100 px-1 rounded">-</code> → -</div>
-              <div><code className="bg-green-100 px-1 rounded">\\times</code> → ×</div>
-              <div><code className="bg-green-100 px-1 rounded">\\div</code> → ÷</div>
-              <div><code className="bg-green-100 px-1 rounded">\\pm</code> → ±</div>
-              <div><code className="bg-green-100 px-1 rounded">\\neq</code> → ≠</div>
-              <div><code className="bg-green-100 px-1 rounded">\\leq</code> → ≤</div>
-              <div><code className="bg-green-100 px-1 rounded">\\geq</code> → ≥</div>
-              <div><code className="bg-green-100 px-1 rounded">\\approx</code> → ≈</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">+</code> → +</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">-</code> → -</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">\\times</code> → ×</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">\\div</code> → ÷</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">\\pm</code> → ±</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">\\neq</code> → ≠</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">\\leq</code> → ≤</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">\\geq</code> → ≥</div>
+              <div><code className="bg-white text-gray-800 px-1 rounded border">\\approx</code> → ≈</div>
             </div>
           </div>
 
@@ -134,21 +134,21 @@ export const LatexHelp = () => {
             <h3 className="font-medium text-purple-800 mb-2">More Examples:</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
-                <div className="font-medium mb-2">Matrices:</div>
-                <code className="bg-purple-100 px-2 py-1 rounded block mb-1">
-                  $\begin{"{pmatrix}"} a & b \\ c & d \end{"{pmatrix}"}$
+                <div className="font-medium mb-2 text-purple-900">Matrices:</div>
+                <code className="bg-white text-gray-800 px-2 py-1 rounded block mb-1 border">
+                  {`$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$`}
                 </code>
                 <div className="p-2 bg-white border rounded">
-                  <MathJax>$\begin{"{pmatrix}"} a & b \\ c & d \end{"{pmatrix}"}$</MathJax>
+                  <MathJax className="text-gray-900">{`$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$`}</MathJax>
                 </div>
               </div>
               <div>
-                <div className="font-medium mb-2">Sets:</div>
-                <code className="bg-purple-100 px-2 py-1 rounded block mb-1">
-                  $\{"{x | x > 0}"\}$
+                <div className="font-medium mb-2 text-purple-900">Sets:</div>
+                <code className="bg-white text-gray-800 px-2 py-1 rounded block mb-1 border">
+                  {`$\\{x | x > 0\\}$`}
                 </code>
                 <div className="p-2 bg-white border rounded">
-                  <MathJax>$\{"{x | x > 0}"\}$</MathJax>
+                  <MathJax className="text-gray-900">{`$\\{x | x > 0\\}$`}</MathJax>
                 </div>
               </div>
             </div>

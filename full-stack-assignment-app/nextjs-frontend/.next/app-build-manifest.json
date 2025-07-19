@@ -16,11 +16,6 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/get-assignments/route.js"
     ],
-    "/api/assignments/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/assignments/route.js"
-    ],
     "/api/assignment-responses/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
