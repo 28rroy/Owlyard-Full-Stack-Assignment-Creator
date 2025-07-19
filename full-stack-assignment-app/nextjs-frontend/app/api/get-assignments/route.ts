@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    
+    console.log('GET request - API Gateway URL from env:', process.env.NEXT_PUBLIC_API_GATEWAY_URL);
+    console.log('GET request - userId parameter:', userId);
+
     // Get your API Gateway URL from environment variables
     const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
     
-    console.log('GET request - API Gateway URL:', apiGatewayUrl);
-
     if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL' || apiGatewayUrl.includes('your-api-id')) {
       return NextResponse.json(
         { 
@@ -17,7 +21,11 @@ export async function GET() {
       );
     }
     
-    const fullUrl = `${apiGatewayUrl}/get-assignments`;
+    // Build URL with userId parameter if provided
+    const fullUrl = userId 
+      ? `${apiGatewayUrl}/get-assignments?userId=${encodeURIComponent(userId)}`
+      : `${apiGatewayUrl}/get-assignments`;
+      
     console.log('Making request to:', fullUrl);
     
     // Call your Lambda function to get assignments

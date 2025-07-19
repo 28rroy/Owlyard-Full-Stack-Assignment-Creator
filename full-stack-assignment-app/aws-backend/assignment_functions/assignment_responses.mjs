@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, GetCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { randomUUID } from "crypto";
 
 // Initialize DynamoDB client
@@ -77,29 +77,30 @@ async function submitResponse(event, tableName, corsHeaders) {
         };
     }
     
-    // Validate required fields
-    const { studentId, assignmentId, assignmentOwnerId, responses } = body;
-    if (!studentId || !assignmentId || !assignmentOwnerId || !responses) {
+    // UPDATED: Validate required fields per boss requirements
+    const { userId, assignmentId, assignmentOwnerId, userAssignmentResponse } = body;
+    if (!userId || !assignmentId || !assignmentOwnerId || !userAssignmentResponse) {
         return {
             statusCode: 400,
             headers: corsHeaders,
             body: JSON.stringify({ 
-                error: 'Missing required fields: studentId, assignmentId, assignmentOwnerId, responses' 
+                error: 'Missing required fields: userId, assignmentId, assignmentOwnerId, userAssignmentResponse' 
             })
         };
     }
     
-    // Create response item
+    // UPDATED: Create response item per boss requirements
     const responseItem = {
-        responseId: `student#${studentId}#assignment#${assignmentId}`, // Primary key
-        studentId: studentId,
-        assignmentId: assignmentId,
-        assignmentOwnerId: assignmentOwnerId,
-        responses: responses, // Vector of student's chosen options
+        userId: userId,                           // PARTITION KEY - same as table structure
+        assignmentId: assignmentId,               // SORT KEY - same as table structure
+        assignmentOwnerId: assignmentOwnerId,     // ADDED: determines who can view vs edit
+        userAssignmentResponse: userAssignmentResponse, // ADDED: array containing selected options
         submittedAt: new Date().toISOString(),
         status: 'submitted',
-        type: 'assignment-response'
+        type: 'user-response'                     // To distinguish from assignments
     };
+    
+    console.log('Saving user response with userId:', userId, 'assignmentId:', assignmentId);
     
     // Save to DynamoDB
     const command = new PutCommand({
@@ -109,7 +110,7 @@ async function submitResponse(event, tableName, corsHeaders) {
     
     await dynamodb.send(command);
     
-    console.log('Assignment response saved:', responseItem.responseId);
+    console.log('Assignment response saved successfully');
     
     return {
         statusCode: 200,
@@ -117,7 +118,8 @@ async function submitResponse(event, tableName, corsHeaders) {
         body: JSON.stringify({
             success: true,
             message: 'Assignment response submitted successfully',
-            responseId: responseItem.responseId,
+            userId: userId,
+            assignmentId: assignmentId,
             submittedAt: responseItem.submittedAt
         })
     };
@@ -125,26 +127,28 @@ async function submitResponse(event, tableName, corsHeaders) {
 
 async function getResponse(event, tableName, corsHeaders) {
     const queryParams = event.queryStringParameters || {};
-    const { studentId, assignmentId, assignmentOwnerId, action } = queryParams;
+    const { userId, assignmentId, assignmentOwnerId, action } = queryParams;
     
     if (action === 'check-permissions') {
-        // Check if student can edit (if studentId matches assignmentOwnerId)
-        const canEdit = studentId === assignmentOwnerId;
+        // Check if user can edit (if userId matches assignmentOwnerId)
+        const canEdit = userId === assignmentOwnerId;
         return {
             statusCode: 200,
             headers: corsHeaders,
             body: JSON.stringify({
                 success: true,
                 canEdit: canEdit,
-                message: canEdit ? 'User can edit responses' : 'User can only view responses'
+                message: canEdit ? 
+                    'User can edit responses' : 'User can only view responses'
             })
         };
     }
 
     if (action === 'get-all-responses' && assignmentId) {
-        // Get all student responses for a specific assignment (for teachers)
+        // Get all user responses for a specific assignment (for teachers)
         console.log('Getting all responses for assignment:', assignmentId);
         
+        // Query all users who have responded to this assignment
         const command = new ScanCommand({
             TableName: tableName,
             FilterExpression: 'assignmentId = :assignmentId AND #type = :responseType',
@@ -153,7 +157,7 @@ async function getResponse(event, tableName, corsHeaders) {
             },
             ExpressionAttributeValues: {
                 ':assignmentId': assignmentId,
-                ':responseType': 'assignment-response'
+                ':responseType': 'user-response'
             }
         });
         
@@ -178,13 +182,14 @@ async function getResponse(event, tableName, corsHeaders) {
         };
     }
     
-    if (studentId && assignmentId) {
-        // Get specific student's response
-        const responseId = `student#${studentId}#assignment#${assignmentId}`;
-        
+    if (userId && assignmentId) {
+        // Get specific user's response using the composite key
         const command = new GetCommand({
             TableName: tableName,
-            Key: { responseId: responseId }
+            Key: { 
+                userId: userId,
+                assignmentId: assignmentId 
+            }
         });
         
         const response = await dynamodb.send(command);
@@ -196,6 +201,18 @@ async function getResponse(event, tableName, corsHeaders) {
                 body: JSON.stringify({ 
                     success: false,
                     error: 'Assignment response not found' 
+                })
+            };
+        }
+        
+        // Check if this is a user response (not an assignment)
+        if (response.Item.type !== 'user-response') {
+            return {
+                statusCode: 404,
+                headers: corsHeaders,
+                body: JSON.stringify({ 
+                    success: false,
+                    error: 'No user response found for this assignment' 
                 })
             };
         }
@@ -215,7 +232,7 @@ async function getResponse(event, tableName, corsHeaders) {
         statusCode: 400,
         headers: corsHeaders,
         body: JSON.stringify({ 
-            error: 'Missing query parameters: studentId and assignmentId required' 
+            error: 'Missing query parameters: userId and assignmentId required' 
         })
     };
 }

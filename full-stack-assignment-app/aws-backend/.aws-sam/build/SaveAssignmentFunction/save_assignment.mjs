@@ -55,8 +55,8 @@ export const handler = async (event) => {
             };
         }
         
-        // Validate required fields
-        const requiredFields = ['title', 'questions'];
+        // Validate required fields - UPDATED to include userId and assignmentOwnerId
+        const requiredFields = ['title', 'questions', 'userId', 'assignmentOwnerId'];
         for (const field of requiredFields) {
             if (!body[field]) {
                 return {
@@ -70,6 +70,8 @@ export const handler = async (event) => {
         // Extract assignment data
         const assignmentTitle = body.title;
         const questions = body.questions;
+        const userId = body.userId; // ADDED: Required partition key
+        const assignmentOwnerId = body.assignmentOwnerId; // ADDED: Required for permissions
         const createdAt = body.createdAt || new Date().toISOString();
         const metadata = body.metadata || {};
         
@@ -115,29 +117,33 @@ export const handler = async (event) => {
         // Generate unique assignment ID or use existing one for updates
         const assignmentId = body.assignmentId || randomUUID();
         
-        // Prepare item for DynamoDB
+        // UPDATED: Prepare item with correct structure per boss requirements
         const assignmentItem = {
-            assignmentId: assignmentId,
+            userId: userId,                    // PARTITION KEY - who created the assignment
+            assignmentId: assignmentId,        // SORT KEY - unique assignment identifier
+            assignmentOwnerId: assignmentOwnerId, // ADDED: determines who can view vs edit
             title: assignmentTitle,
             questions: questions,
             createdAt: createdAt,
             metadata: metadata,
             totalQuestions: Object.keys(questions).length,
-            status: 'active'
+            status: 'active',
+            type: 'assignment'                 // To distinguish from user responses
         };
         
         // Get DynamoDB table name from environment variable
         const tableName = process.env.DYNAMODB_TABLE_NAME || 'AssignmentsTable';
         console.log('Using table:', tableName);
+        console.log('Saving assignment with userId:', userId, 'assignmentId:', assignmentId);
         
-        // Save to DynamoDB
+        // Save to DynamoDB with new key structure
         const dynamoCommand = new PutCommand({
             TableName: tableName,
             Item: assignmentItem
         });
         
         await dynamodb.send(dynamoCommand);
-        console.log('Assignment saved to DynamoDB:', assignmentId);
+        console.log('Assignment saved to DynamoDB with correct key structure');
         
         // Save to S3 as .quiz file
         const bucketName = process.env.S3_BUCKET_NAME;
@@ -153,23 +159,22 @@ export const handler = async (event) => {
                     ContentType: 'application/json',
                     Metadata: {
                         'assignment-id': assignmentId,
+                        'user-id': userId,
+                        'assignment-owner-id': assignmentOwnerId,
                         'created-at': createdAt,
                         'total-questions': Object.keys(questions).length.toString()
                     }
                 });
                 
                 await s3Client.send(s3Command);
-                console.log(`Quiz file saved to S3: ${quizFileName}`);
+                console.log('Assignment saved to S3:', quizFileName);
             } catch (s3Error) {
-                console.error('Error saving to S3:', s3Error);
-                // Continue execution - S3 save is optional
+                console.warn('Failed to save to S3, but DynamoDB save was successful:', s3Error);
+                // Continue - S3 save is optional
             }
+        } else {
+            console.log('S3 bucket not configured, skipping S3 save');
         }
-        
-        // Log successful save
-        console.log(`Assignment saved successfully: ${assignmentId}`);
-        console.log(`Title: ${assignmentTitle}`);
-        console.log(`Questions count: ${Object.keys(questions).length}`);
         
         // Return success response
         return {
@@ -179,26 +184,25 @@ export const handler = async (event) => {
                 success: true,
                 message: 'Assignment saved successfully',
                 assignmentId: assignmentId,
+                userId: userId,
+                assignmentOwnerId: assignmentOwnerId,
                 title: assignmentTitle,
-                questionCount: Object.keys(questions).length
+                totalQuestions: Object.keys(questions).length,
+                createdAt: createdAt
             })
         };
         
     } catch (error) {
-        // Log the error for debugging
         console.error('Error saving assignment:', error);
-        console.error('Event:', JSON.stringify(event));
         console.error('Error stack:', error.stack);
         
-        // Return error response
         return {
             statusCode: 500,
             headers: corsHeaders,
             body: JSON.stringify({
                 success: false,
                 error: 'Internal server error',
-                message: error.message,
-                details: error.stack
+                message: error.message
             })
         };
     }

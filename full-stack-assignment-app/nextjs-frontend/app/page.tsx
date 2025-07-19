@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { AssignmentCreator } from '@/components/AssignmentCreator';
 import { AssignmentViewer } from '@/components/AssignmentViewer';
 import { StudentResultsViewer } from '@/components/StudentResultsViewer';
-import { X, Pencil, Eye, Play, User, BarChart3 } from 'lucide-react';
+import { useUser } from '@/contexts/UserContext';
+import { X, Pencil, Eye, Play, User, BarChart3, GraduationCap, Users } from 'lucide-react';
 
 // Types for assignment data
 interface AssignmentQuestion {
@@ -16,15 +17,19 @@ interface AssignmentQuestion {
 }
 
 interface Assignment {
+  userId: string;
   assignmentId: string;
+  assignmentOwnerId: string;
   title: string;
   questions: { [key: string]: AssignmentQuestion };
   createdAt: string;
   totalQuestions: number;
   status: string;
+  type: string;
 }
 
 export default function Home() {
+  const { userId, isTeacher, assignmentOwnerId } = useUser();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAssignmentViewer, setShowAssignmentViewer] = useState(false);
@@ -46,23 +51,57 @@ export default function Home() {
     return () => window.removeEventListener("close-assignment-modal", handler);
   }, []);
 
-  // Fetch assignments from API
+  // Fetch assignments from API with userId
   const fetchAssignments = async () => {
     setLoading(true);
+    console.log('🔍 FRONTEND DEBUG: Starting to fetch assignments...');
+    console.log('🔍 Using userId:', userId);
+    console.log('🔍 Current time:', new Date().toISOString());
+    
     try {
-      const response = await fetch('/api/get-assignments');
+      // For teachers, get their assignments; for students, get all assignments
+      const url = userMode === 'teacher' 
+        ? `/api/get-assignments?userId=${userId}`
+        : '/api/get-assignments'; // All assignments for students
+        
+      console.log('🔍 Fetching from URL:', url);
+      
+      const response = await fetch(url);
+      console.log('🔍 Response status:', response.status);
+      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('🔍 Raw response data:', data);
+        console.log('🔍 Assignments received:', data.assignments?.length || 0);
+        
+        if (data.assignments && data.assignments.length > 0) {
+          console.log('🔍 Assignment details:');
+          data.assignments.forEach((assignment: Assignment, index: number) => {
+            console.log(`  ${index + 1}. ID: ${assignment.assignmentId}, Title: "${assignment.title}", Owner: ${assignment.assignmentOwnerId}`);
+          });
+        } else {
+          console.log('❌ NO ASSIGNMENTS RETURNED from API');
+        }
+        
+        // Check for debug info
+        if (data.debug) {
+          console.log('🔍 Debug info from backend:', data.debug);
+        }
+        
         setAssignments(data.assignments || []);
       } else {
-        console.error('Failed to fetch assignments');
+        console.error('❌ API response not ok:', response.status, response.statusText);
+        const errorText = await response.text();
+        console.error('❌ Error response body:', errorText);
         setAssignments([]);
       }
     } catch (error) {
-      console.error('Error fetching assignments:', error);
+      console.error('❌ Error fetching assignments:', error);
       setAssignments([]);
     } finally {
       setLoading(false);
+      console.log('🔍 Finished fetching assignments');
     }
   };
 
@@ -118,23 +157,25 @@ export default function Home() {
           <div className="flex gap-2">
             <button
               onClick={() => setUserMode('teacher')}
-              className={`px-4 py-2 rounded-lg transition-colors ${
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
                 userMode === 'teacher'
                   ? 'bg-teal-600 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              👨‍🏫 Teacher
+              <GraduationCap className="h-4 w-4" />
+              Teacher
             </button>
             <button
               onClick={() => setUserMode('student')}
-              className={`px-4 py-2 rounded-lg transition-colors ${
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
                 userMode === 'student'
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              👨‍🎓 Student
+              <Users className="h-4 w-4" />
+              Student
             </button>
           </div>
         </div>
@@ -152,6 +193,12 @@ export default function Home() {
             />
           </div>
         )}
+
+        {/* Current User Info */}
+        <div className="mt-4 text-sm text-gray-600">
+          <div>Current User ID: {userId}</div>
+          <div>Assignment Owner ID: {assignmentOwnerId}</div>
+        </div>
       </div>
 
       {/* Main Buttons */}
@@ -244,93 +291,97 @@ export default function Home() {
                 <h2 className={`text-2xl font-bold ${
                   userMode === 'teacher' ? 'text-teal-800' : 'text-blue-800'
                 }`}>
-                  {userMode === 'teacher' ? 'My Assignments' : 'Available Assignments'}
+                  {userMode === 'teacher' ? 'Manage Assignments' : 'Available Assignments'}
                 </h2>
                 <button
                   onClick={() => setShowViewModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="text-gray-500 hover:text-gray-700"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-6 w-6" />
                 </button>
               </div>
 
               <div className="p-6 overflow-y-auto max-h-[60vh]">
                 {loading ? (
                   <div className="text-center py-8">
-                    <div className={`animate-spin rounded-full h-12 w-12 border-b-2 mx-auto ${
-                      userMode === 'teacher' ? 'border-teal-600' : 'border-blue-600'
-                    }`}></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
                     <p className="mt-4 text-gray-600">Loading assignments...</p>
                   </div>
                 ) : assignments.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-gray-600">
-                      {userMode === 'teacher' 
-                        ? 'No assignments found. Create your first assignment!' 
-                        : 'No assignments available at the moment.'
-                      }
-                    </p>
+                    <p className="text-gray-600">No assignments found.</p>
+                    {userMode === 'teacher' && (
+                      <button
+                        onClick={() => {
+                          setShowViewModal(false);
+                          setShowCreateModal(true);
+                        }}
+                        className="mt-4 bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700"
+                      >
+                        Create Your First Assignment
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {assignments.map((assignment) => {
-                      // Safety check for assignment data
-                      if (!assignment || !assignment.assignmentId) {
-                        return null;
-                      }
-                      
-                      return (
-                        <div
-                          key={assignment.assignmentId}
-                          className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <h3 className={`text-lg font-semibold mb-2 ${
-                                userMode === 'teacher' ? 'text-teal-800' : 'text-blue-800'
-                              }`}>
-                                {assignment.title || 'Untitled Assignment'}
-                              </h3>
-                              <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                                <span>📝 {assignment.totalQuestions || Object.keys(assignment.questions || {}).length} questions</span>
-                                <span>🎯 {getTotalPoints(assignment.questions)} total points</span>
-                                <span>📅 {assignment.createdAt ? new Date(assignment.createdAt).toLocaleDateString() : 'No date'}</span>
-                              </div>
+                    {assignments.map((assignment) => (
+                      <div
+                        key={`${assignment.userId}-${assignment.assignmentId}`}
+                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-800">
+                              {assignment.title}
+                            </h3>
+                            <div className="text-sm text-gray-600 mt-1">
+                              <span>Questions: {assignment.totalQuestions}</span>
+                              <span className="mx-2">•</span>
+                              <span>Points: {getTotalPoints(assignment.questions)}</span>
+                              <span className="mx-2">•</span>
+                              <span>Created: {new Date(assignment.createdAt).toLocaleDateString()}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              {userMode === 'teacher' ? (
-                                <>
-                                  <button
-                                    onClick={() => handleEditAssignment(assignment)}
-                                    className="p-2 text-orange-400 hover:text-orange-500 hover:bg-orange-50 rounded-md transition-colors"
-                                    title="Edit Assignment"
-                                  >
-                                    <Pencil className="h-5 w-5" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleViewStudentResults(assignment)}
-                                    className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
-                                    title="View Student Results"
-                                  >
-                                    <BarChart3 className="h-4 w-4" />
-                                    Results
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  onClick={() => handleTakeAssignment(assignment)}
-                                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                                  title="Take Assignment"
-                                >
-                                  <Play className="h-4 w-4" />
-                                  Take Quiz
-                                </button>
-                              )}
+                            <div className="text-xs text-gray-500 mt-1">
+                              Owner: {assignment.assignmentOwnerId} | Creator: {assignment.userId}
                             </div>
                           </div>
+
+                          <div className="flex items-center gap-2 ml-4">
+                            {userMode === 'teacher' && (
+                              <>
+                                <button
+                                  onClick={() => handleEditAssignment(assignment)}
+                                  className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                                  title="Edit Assignment"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleViewStudentResults(assignment)}
+                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                  title="View Student Results"
+                                >
+                                  <BarChart3 className="h-4 w-4" />
+                                  Results
+                                </button>
+                              </>
+                            )}
+                            
+                            {userMode === 'student' && (
+                              <button
+                                onClick={() => handleTakeAssignment(assignment)}
+                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                                title="Take Assignment"
+                              >
+                                <Play className="h-4 w-4" />
+                                Take
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -339,48 +390,32 @@ export default function Home() {
         </div>
       )}
 
-      {/* Assignment Viewer Modal (Student) */}
+      {/* Assignment Viewer Modal (Student taking assignment) */}
       {showAssignmentViewer && selectedAssignment && (
-        <div
-          className="fixed inset-0 z-50 bg-black bg-opacity-50"
-          onClick={() => setShowAssignmentViewer(false)}
-        >
-          <div
-            className="absolute inset-0 flex items-center justify-center p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
               <AssignmentViewer
                 assignment={selectedAssignment}
                 studentId={studentId}
-                assignmentOwnerId="teacher123" // This would come from the assignment data in a real app
-                onClose={() => {
-                  setShowAssignmentViewer(false);
-                  setSelectedAssignment(null);
-                }}
+                assignmentOwnerId={selectedAssignment.assignmentOwnerId}
+                onCloseAction={() => setShowAssignmentViewer(false)}
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* Student Results Modal (Teacher) */}
+      {/* Student Results Viewer Modal */}
       {showStudentResults && selectedAssignment && (
-        <div
-          className="fixed inset-0 z-50 bg-black bg-opacity-50"
-          onClick={() => setShowStudentResults(false)}
-        >
-          <div
-            className="absolute inset-0 flex items-center justify-center p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <StudentResultsViewer
-              assignment={selectedAssignment}
-              onCloseAction={() => {
-                setShowStudentResults(false);
-                setSelectedAssignment(null);
-              }}
-            />
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+              <StudentResultsViewer
+                assignment={selectedAssignment}
+                onCloseAction={() => setShowStudentResults(false)}
+              />
+            </div>
           </div>
         </div>
       )}

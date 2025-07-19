@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Check, Pencil, Save } from "lucide-react";
+import { Check, Pencil, Save, Eye } from "lucide-react";
+import { useUser } from "@/contexts/UserContext";
+import { MathJax } from "@/components/MathJax";
+import { LatexHelp } from "@/components/LatexHelp";
 
 type QuestionData = {
   question: string;
@@ -12,6 +15,9 @@ type QuestionData = {
   correctAnswers: number[];
   explanation: string;
   showExplanation: boolean;
+  showQuestionPreview: boolean;
+  showOptionPreviews: boolean[];
+  showExplanationPreview: boolean;
   points: number;
 };
 
@@ -37,17 +43,23 @@ const defaultQuestion = (): QuestionData => ({
   correctAnswers: [],
   explanation: "",
   showExplanation: false,
+  showQuestionPreview: false,
+  showOptionPreviews: [],
+  showExplanationPreview: false,
   points: 1,
 });
 
 // Types for editing
 interface Assignment {
+  userId: string;
   assignmentId: string;
+  assignmentOwnerId: string;
   title: string;
   questions: { [key: string]: AssignmentQuestion };
   createdAt: string;
   totalQuestions: number;
   status: string;
+  type: string;
 }
 
 interface AssignmentCreatorProps {
@@ -55,6 +67,7 @@ interface AssignmentCreatorProps {
 }
 
 export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps) => {
+  const { userId, assignmentOwnerId } = useUser();
   const [questions, setQuestions] = useState<QuestionData[]>([defaultQuestion()]);
   const [numOptions, setNumOptions] = useState<number[]>([0]);
   const [assignmentTitle, setAssignmentTitle] = useState<string>("");
@@ -182,7 +195,9 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
         createdAt: new Date().toISOString(),
         metadata: {
           totalQuestions: Object.keys(assignmentData).length
-        }
+        },
+        userId: userId,
+        assignmentOwnerId: assignmentOwnerId
       };
 
       // Add assignment ID if editing
@@ -271,9 +286,12 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
 
       {/* Assignment Title */}
       <div className="mb-6 p-4 bg-blue-50 rounded-md border">
-        <label className="block text-teal-800 font-medium mb-2">
-          Assignment Title *
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-teal-800 font-medium">
+            Assignment Title *
+          </label>
+          <LatexHelp />
+        </div>
         <input
           type="text"
           placeholder="Enter assignment title"
@@ -292,43 +310,66 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
 
           {/* Question Input */}
-          <div className="flex items-center gap-2">
-            <div className="flex-1">
-              <input
-                type="text"
-                placeholder="Enter question"
-                value={q.question}
-                onChange={(e) => {
-                  if (e.target.value.length <= MAX_QUESTION_LENGTH) {
-                    updateQuestion(qIndex, { question: e.target.value });
-                  }
-                }}
-                readOnly={!q.questionEditable}
-                className={`w-full p-2 border rounded-md text-gray-800 ${
-                  !q.questionEditable ? "bg-gray-100" : ""
-                }`}
-                maxLength={MAX_QUESTION_LENGTH}
-              />
-              <div className="text-xs text-gray-500 mt-1">
-                {q.question.length}/{MAX_QUESTION_LENGTH} characters
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-teal-800 font-medium">Question Text *</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateQuestion(qIndex, { showQuestionPreview: !q.showQuestionPreview })}
+                  className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
+                >
+                  <Eye className="h-3 w-3" />
+                  {q.showQuestionPreview ? 'Hide' : 'Show'} Preview
+                </button>
               </div>
             </div>
-            {q.questionEditable ? (
-              <button 
-                onClick={() => updateQuestion(qIndex, { questionEditable: false })} 
-                title="Save"
-                className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors"
-              >
-                <Check className="h-5 w-5" />
-              </button>
-            ) : (
-              <button 
-                onClick={() => updateQuestion(qIndex, { questionEditable: true })} 
-                title="Edit"
-                className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
-              >
-                <Pencil className="h-5 w-5" />
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <textarea
+                  placeholder="Enter question (supports LaTeX: $x^2$ for inline, $x^2$ for display)"
+                  value={q.question}
+                  onChange={(e) => {
+                    if (e.target.value.length <= MAX_QUESTION_LENGTH) {
+                      updateQuestion(qIndex, { question: e.target.value });
+                    }
+                  }}
+                  readOnly={!q.questionEditable}
+                  className={`w-full p-2 border rounded-md text-gray-800 ${
+                    !q.questionEditable ? "bg-gray-100" : ""
+                  }`}
+                  maxLength={MAX_QUESTION_LENGTH}
+                  rows={3}
+                />
+                <div className="text-xs text-gray-500 mt-1">
+                  {q.question.length}/{MAX_QUESTION_LENGTH} characters
+                </div>
+              </div>
+              {q.questionEditable ? (
+                <button 
+                  onClick={() => updateQuestion(qIndex, { questionEditable: false })} 
+                  title="Save"
+                  className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors"
+                >
+                  <Check className="h-5 w-5" />
+                </button>
+              ) : (
+                <button 
+                  onClick={() => updateQuestion(qIndex, { questionEditable: true })} 
+                  title="Edit"
+                  className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+                >
+                  <Pencil className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+            
+            {/* Question Preview */}
+            {q.showQuestionPreview && q.question && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <div className="text-xs text-yellow-800 font-medium mb-2">LaTeX Preview:</div>
+                <MathJax className="text-gray-800">{q.question}</MathJax>
+              </div>
             )}
           </div>
 
@@ -365,9 +406,56 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
             </select>
           </label>
 
+          {/* Options */}
+          {q.options.map((opt, i) => (
+            <div key={i} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-gray-700">Option {i + 1}</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newPreviews = [...(q.showOptionPreviews || [])];
+                    newPreviews[i] = !newPreviews[i];
+                    updateQuestion(qIndex, { showOptionPreviews: newPreviews });
+                  }}
+                  className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
+                >
+                  <Eye className="h-3 w-3" />
+                  {q.showOptionPreviews?.[i] ? 'Hide' : 'Show'} Preview
+                </button>
+              </div>
+              <input
+                type="text"
+                value={opt}
+                readOnly={!q.optionsEditable}
+                onChange={(e) => {
+                  if (e.target.value.length <= MAX_OPTION_LENGTH) {
+                    handleOptionChange(qIndex, i, e.target.value);
+                  }
+                }}
+                placeholder={`Option ${i + 1} (supports LaTeX: $x^2$)`}
+                className={`w-full p-2 border rounded-md text-gray-900 ${
+                  !q.optionsEditable ? "bg-gray-100" : ""
+                }`}
+                maxLength={MAX_OPTION_LENGTH}
+              />
+              <div className="text-xs text-gray-500">
+                {opt.length}/{MAX_OPTION_LENGTH} characters
+              </div>
+              
+              {/* Option Preview */}
+              {q.showOptionPreviews?.[i] && opt && (
+                <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="text-xs text-blue-800 font-medium mb-1">LaTeX Preview:</div>
+                  <MathJax className="text-gray-800">{opt}</MathJax>
+                </div>
+              )}
+            </div>
+          ))}
+
           {/* Save/Edit Buttons for Options */}
           {q.options.length > 0 && (
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mt-4">
               <p className="text-teal-800 font-medium">Answer Choices:</p>
               {q.optionsEditable ? (
                 <button 
@@ -388,30 +476,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               )}
             </div>
           )}
-
-          {/* Options */}
-          {q.options.map((opt, i) => (
-            <div key={i}>
-              <input
-                type="text"
-                value={opt}
-                readOnly={!q.optionsEditable}
-                onChange={(e) => {
-                  if (e.target.value.length <= MAX_OPTION_LENGTH) {
-                    handleOptionChange(qIndex, i, e.target.value);
-                  }
-                }}
-                placeholder={`Option ${i + 1}`}
-                className={`w-full p-2 border rounded-md mt-2 text-gray-900 ${
-                  !q.optionsEditable ? "bg-gray-100" : ""
-                }`}
-                maxLength={MAX_OPTION_LENGTH}
-              />
-              <div className="text-xs text-gray-500 mt-1">
-                {opt.length}/{MAX_OPTION_LENGTH} characters
-              </div>
-            </div>
-          ))}
 
           {/* Correct Answer Count and Selection */}
           {q.options.length > 0 && (
@@ -473,13 +537,34 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               + Add Explanation
             </button>
             {q.showExplanation && (
-              <textarea
-                value={q.explanation}
-                onChange={(e) => updateQuestion(qIndex, { explanation: e.target.value })}
-                placeholder="Enter explanation (optional)"
-                className="w-full mt-2 p-2 border rounded-md text-gray-900"
-                rows={3}
-              />
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm text-gray-700">Explanation (optional)</label>
+                  <button
+                    type="button"
+                    onClick={() => updateQuestion(qIndex, { showExplanationPreview: !q.showExplanationPreview })}
+                    className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
+                  >
+                    <Eye className="h-3 w-3" />
+                    {q.showExplanationPreview ? 'Hide' : 'Show'} Preview
+                  </button>
+                </div>
+                <textarea
+                  value={q.explanation}
+                  onChange={(e) => updateQuestion(qIndex, { explanation: e.target.value })}
+                  placeholder="Enter explanation (supports LaTeX: $x^2$ for inline, $x^2$ for display)"
+                  className="w-full p-2 border rounded-md text-gray-900"
+                  rows={3}
+                />
+                
+                {/* Explanation Preview */}
+                {q.showExplanationPreview && q.explanation && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
+                    <div className="text-xs text-orange-800 font-medium mb-2">LaTeX Preview:</div>
+                    <MathJax className="text-gray-800">{q.explanation}</MathJax>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

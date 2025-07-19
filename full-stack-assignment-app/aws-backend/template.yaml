@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Assignment Creator Backend - Working version
+Description: Assignment Creator Backend - Updated with correct table structure
 
 Parameters:
   S3BucketName:
@@ -19,6 +19,31 @@ Globals:
       AllowOrigin: "'*'"
 
 Resources:
+  # UPDATED: DynamoDB table with correct partition key (userId) and sort key (assignmentId)
+  AssignmentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AssignmentsTable
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: assignmentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH    # Partition key
+        - AttributeName: assignmentId
+          KeyType: RANGE   # Sort key
+      BillingMode: PAY_PER_REQUEST
+      # Add Global Secondary Index for querying all assignments
+      GlobalSecondaryIndexes:
+        - IndexName: AssignmentIdIndex
+          KeySchema:
+            - AttributeName: assignmentId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
   # Lambda function to save assignments (POST)
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
@@ -27,7 +52,7 @@ Resources:
       Handler: save_assignment.handler
       Policies:
         - DynamoDBWritePolicy:
-            TableName: AssignmentsTable
+            TableName: !Ref AssignmentsTable
         - Version: '2012-10-17'
           Statement:
             - Effect: Allow
@@ -37,7 +62,7 @@ Resources:
               Resource: !Sub "arn:aws:s3:::${S3BucketName}/assignment/*"
       Environment:
         Variables:
-          DYNAMODB_TABLE_NAME: AssignmentsTable
+          DYNAMODB_TABLE_NAME: !Ref AssignmentsTable
           S3_BUCKET_NAME: !Ref S3BucketName
       Events:
         SaveAssignment:
@@ -59,10 +84,19 @@ Resources:
       Handler: get_assignments.handler
       Policies:
         - DynamoDBReadPolicy:
-            TableName: AssignmentsTable
+            TableName: !Ref AssignmentsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource: 
+                - !GetAtt AssignmentsTable.Arn
+                - !Sub "${AssignmentsTable.Arn}/index/*"
       Environment:
         Variables:
-          DYNAMODB_TABLE_NAME: AssignmentsTable
+          DYNAMODB_TABLE_NAME: !Ref AssignmentsTable
       Events:
         GetAssignments:
           Type: Api
@@ -83,12 +117,21 @@ Resources:
       Handler: assignment_responses.handler
       Policies:
         - DynamoDBWritePolicy:
-            TableName: AssignmentsTable
+            TableName: !Ref AssignmentsTable
         - DynamoDBReadPolicy:
-            TableName: AssignmentsTable
+            TableName: !Ref AssignmentsTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource: 
+                - !GetAtt AssignmentsTable.Arn
+                - !Sub "${AssignmentsTable.Arn}/index/*"
       Environment:
         Variables:
-          DYNAMODB_TABLE_NAME: AssignmentsTable
+          DYNAMODB_TABLE_NAME: !Ref AssignmentsTable
       Events:
         AssignmentResponsesPost:
           Type: Api

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { CheckCircle, Clock, User, FileText, AlertCircle } from 'lucide-react';
+import { CheckCircle, Clock, User, FileText, AlertCircle, X, GraduationCap, Users } from 'lucide-react';
+import { MathJax } from '@/components/MathJax';
 
 // Types
 interface AssignmentQuestion {
@@ -13,32 +14,35 @@ interface AssignmentQuestion {
 }
 
 interface Assignment {
+  userId: string;
   assignmentId: string;
+  assignmentOwnerId: string;
   title: string;
   questions: { [key: string]: AssignmentQuestion };
   createdAt: string;
   totalQuestions: number;
   status: string;
+  type: string;
 }
 
 interface AssignmentResponse {
-  responseId: string;
-  studentId: string;
+  userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
-  responses: number[]; // Vector of chosen options
+  userAssignmentResponse: number[]; // UPDATED: new field name
   submittedAt: string;
   status: string;
+  type: string;
 }
 
 interface AssignmentViewerProps {
   assignment: Assignment;
   studentId: string;
   assignmentOwnerId: string;
-  onClose: () => void;
+  onCloseAction: () => void;
 }
 
-export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onClose }: AssignmentViewerProps) => {
+export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onCloseAction }: AssignmentViewerProps) => {
   const [responses, setResponses] = useState<number[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,10 +62,11 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
   const checkPermissions = async () => {
     try {
       const response = await fetch(
-        `/api/assignment-responses?action=check-permissions&studentId=${studentId}&assignmentOwnerId=${assignmentOwnerId}`
+        `/api/assignment-responses?action=check-permissions&userId=${studentId}&assignmentOwnerId=${assignmentOwnerId}`
       );
       const data = await response.json();
       setCanEdit(data.canEdit);
+      console.log('Permissions check:', data);
     } catch (error) {
       console.error('Error checking permissions:', error);
     }
@@ -69,15 +74,16 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
 
   const checkExistingResponse = async () => {
     try {
+      // UPDATED: Use userId instead of studentId for the query
       const response = await fetch(
-        `/api/assignment-responses?studentId=${studentId}&assignmentId=${assignment.assignmentId}`
+        `/api/assignment-responses?userId=${studentId}&assignmentId=${assignment.assignmentId}`
       );
       
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.response) {
           setExistingResponse(data.response);
-          setResponses(data.response.responses);
+          setResponses(data.response.userAssignmentResponse); // UPDATED: use new field name
           setIsSubmitted(true);
           // If student is owner, they can see results
           if (canEdit) {
@@ -109,12 +115,15 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     setIsSubmitting(true);
 
     try {
+      // UPDATED: Use new payload structure per boss requirements
       const payload = {
-        studentId,
+        userId: studentId, // Using studentId as the userId
         assignmentId: assignment.assignmentId,
-        assignmentOwnerId,
-        responses
+        assignmentOwnerId: assignmentOwnerId,
+        userAssignmentResponse: responses // UPDATED: new field name for array containing selected options
       };
+
+      console.log('Submitting assignment response:', payload);
 
       const response = await fetch('/api/assignment-responses', {
         method: 'POST',
@@ -126,6 +135,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
 
       if (response.ok) {
         const data = await response.json();
+        console.log('Assignment submitted successfully:', data);
         alert('Assignment submitted successfully!');
         setIsSubmitted(true);
         
@@ -135,6 +145,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
         }
       } else {
         const error = await response.json();
+        console.error('Submission failed:', error);
         alert(`Failed to submit assignment: ${error.error}`);
       }
     } catch (error) {
@@ -149,165 +160,180 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     return question.correctOptions.length > 1 ? 'Multiple answers' : 'Single answer';
   };
 
-  const getTotalPoints = (): number => {
-    return Object.values(assignment.questions).reduce((total, q) => total + q.points, 0);
-  };
+  const calculateScore = (): { score: number; totalPoints: number } => {
+    if (!showResults || !isSubmitted) return { score: 0, totalPoints: 0 };
 
-  const getScore = (): number => {
-    if (!showResults) return 0;
-    
     let score = 0;
-    Object.entries(assignment.questions).forEach(([key, question], index) => {
-      const studentAnswer = responses[index];
-      if (question.correctOptions.includes(studentAnswer)) {
-        score += question.points;
+    let totalPoints = 0;
+
+    Object.values(assignment.questions).forEach((question, index) => {
+      totalPoints += question.points;
+      
+      const userAnswer = responses[index];
+      const correctAnswers = question.correctOptions;
+      
+      // For single answer questions
+      if (correctAnswers.length === 1) {
+        if (userAnswer === correctAnswers[0]) {
+          score += question.points;
+        }
+      } else {
+        // For multiple answer questions (more complex scoring could be implemented)
+        if (correctAnswers.includes(userAnswer)) {
+          score += question.points;
+        }
       }
     });
-    return score;
+
+    return { score, totalPoints };
   };
 
-  return (
-    <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
-      {/* Header */}
-      <div className="border-b border-gray-200 pb-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-teal-800">{assignment.title}</h1>
-            <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-              <span className="flex items-center gap-1">
-                <FileText className="h-4 w-4" />
-                {Object.keys(assignment.questions).length} questions
-              </span>
-              <span className="flex items-center gap-1">
-                <CheckCircle className="h-4 w-4" />
-                {getTotalPoints()} total points
-              </span>
-              <span className="flex items-center gap-1">
-                <User className="h-4 w-4" />
-                Student: {studentId}
-              </span>
-              {canEdit && (
-                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded text-xs">
-                  Owner View
-                </span>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-xl font-bold"
-          >
-            ×
-          </button>
-        </div>
+  const { score, totalPoints } = calculateScore();
 
-        {/* Status and Score */}
-        {isSubmitted && (
-          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <span className="text-green-800 font-medium">
-                  Assignment Submitted
-                </span>
-              </div>
-              {showResults && (
-                <div className="text-green-800 font-bold">
-                  Score: {getScore()}/{getTotalPoints()} points
-                </div>
-              )}
-            </div>
+  return (
+    <div className="p-6 max-h-[80vh] overflow-y-auto">
+      {/* Header - matching AssignmentCreator style */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-teal-800 mb-2">{assignment.title}</h1>
+          <div className="flex items-center gap-4 text-sm text-gray-600 flex-wrap">
+            <span className="flex items-center gap-1">
+              <FileText className="h-4 w-4" />
+              {Object.keys(assignment.questions).length} questions
+            </span>
+            <span className="flex items-center gap-1">
+              <User className="h-4 w-4" />
+              Student: {studentId}
+            </span>
             {existingResponse && (
-              <p className="text-green-700 text-sm mt-1">
-                Submitted on {new Date(existingResponse.submittedAt).toLocaleString()}
-              </p>
+              <span className="flex items-center gap-1 text-green-600">
+                <CheckCircle className="h-4 w-4" />
+                Submitted: {new Date(existingResponse.submittedAt).toLocaleString()}
+              </span>
             )}
           </div>
-        )}
+        </div>
+        <button
+          onClick={onCloseAction}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          title="Close"
+        >
+          <X className="h-6 w-6 text-gray-500" />
+        </button>
       </div>
 
-      {/* Questions */}
+      {/* Assignment Info - matching AssignmentCreator blue background style */}
+      <div className="mb-6 p-4 bg-blue-50 rounded-md border">
+        <h3 className="text-teal-800 font-medium mb-3">Assignment Information</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+          <div>
+            <div className="font-medium text-gray-700">Assignment Owner</div>
+            <div className="text-gray-600">{assignment.assignmentOwnerId}</div>
+          </div>
+          <div>
+            <div className="font-medium text-gray-700">Created</div>
+            <div className="text-gray-600">{new Date(assignment.createdAt).toLocaleDateString()}</div>
+          </div>
+          <div>
+            <div className="font-medium text-gray-700">Total Points</div>
+            <div className="text-gray-600">{Object.values(assignment.questions).reduce((sum, q) => sum + q.points, 0)}</div>
+          </div>
+          <div>
+            <div className="font-medium text-gray-700">Can Edit</div>
+            <div className="text-gray-600">{canEdit ? 'Yes' : 'No'}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Score Display - matching AssignmentCreator style */}
+      {showResults && isSubmitted && (
+        <div className="mb-6 p-4 bg-green-50 rounded-md border border-green-200">
+          <h3 className="text-lg font-semibold text-green-800 mb-2">Your Results</h3>
+          <div className="text-2xl font-bold text-green-600">
+            {score} / {totalPoints} points ({Math.round((score / totalPoints) * 100)}%)
+          </div>
+        </div>
+      )}
+
+      {/* Questions - matching AssignmentCreator question card style */}
       <div className="space-y-6">
-        {Object.entries(assignment.questions).map(([questionKey, question], questionIndex) => (
-          <div key={questionKey} className="border border-gray-200 rounded-lg p-6">
-            {/* Question Header */}
+        {Object.entries(assignment.questions).map(([questionKey, question], index) => (
+          <div
+            key={questionKey}
+            className={`border border-gray-200 p-4 rounded-md bg-white shadow-sm ${
+              isSubmitted && !canEdit ? 'bg-gray-50' : ''
+            }`}
+          >
             <div className="flex items-start justify-between mb-4">
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Question {questionIndex + 1}
-                </h3>
-                <p className="text-gray-800 mb-3">{question.question}</p>
-                <div className="flex items-center gap-4 text-sm">
-                  <span className="flex items-center gap-1 text-blue-600">
-                    <AlertCircle className="h-4 w-4" />
-                    {getQuestionType(question)}
-                  </span>
-                  <span className="text-gray-600">
-                    {question.points} {question.points === 1 ? 'point' : 'points'}
-                  </span>
-                </div>
-              </div>
+              <h3 className="text-xl font-semibold text-teal-800">
+                Question {index + 1}
+                <span className="ml-2 text-sm text-gray-500 font-normal">
+                  ({question.points} point{question.points !== 1 ? 's' : ''})
+                </span>
+              </h3>
+              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                question.correctOptions.length > 1
+                  ? 'bg-orange-100 text-orange-800'
+                  : 'bg-blue-100 text-blue-800'
+              }`}>
+                {getQuestionType(question)}
+              </span>
             </div>
 
-            {/* Options */}
+            <div className="text-gray-800 mb-4">
+              <MathJax>{question.question}</MathJax>
+            </div>
+
             <div className="space-y-3">
               {question.options.map((option, optionIndex) => {
-                const isSelected = responses[questionIndex] === optionIndex;
+                const isSelected = responses[index] === optionIndex;
                 const isCorrect = question.correctOptions.includes(optionIndex);
-                const showCorrectAnswer = showResults && isCorrect;
-                const showWrongAnswer = showResults && isSelected && !isCorrect;
-                
+                const showCorrectAnswer = showResults && isSubmitted;
+
                 return (
                   <div
                     key={optionIndex}
-                    className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected
-                        ? showWrongAnswer
-                          ? 'border-red-500 bg-red-50'
-                          : showCorrectAnswer
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-teal-500 bg-teal-50'
-                        : showCorrectAnswer
-                        ? 'border-green-500 bg-green-50'
-                        : 'border-gray-200 bg-white hover:border-teal-300 hover:bg-teal-25'
+                    className={`p-3 border rounded-md cursor-pointer transition-colors ${
+                      isSubmitted && !canEdit
+                        ? 'cursor-not-allowed'
+                        : 'hover:bg-gray-50'
                     } ${
-                      (isSubmitted && !canEdit) ? 'cursor-not-allowed' : 'cursor-pointer'
+                      isSelected
+                        ? showCorrectAnswer
+                          ? isCorrect
+                            ? 'bg-green-100 border-green-300'
+                            : 'bg-red-100 border-red-300'
+                          : 'bg-blue-100 border-blue-300'
+                        : showCorrectAnswer && isCorrect
+                        ? 'bg-green-50 border-green-200'
+                        : 'border-gray-200'
                     }`}
-                    onClick={() => handleOptionSelect(questionIndex, optionIndex)}
+                    onClick={() => handleOptionSelect(index, optionIndex)}
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          isSelected
-                            ? showWrongAnswer
-                              ? 'border-red-500 bg-red-500'
-                              : showCorrectAnswer
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                        isSelected
+                          ? showCorrectAnswer
+                            ? isCorrect
                               ? 'border-green-500 bg-green-500'
-                              : 'border-teal-500 bg-teal-500'
-                            : showCorrectAnswer
-                            ? 'border-green-500 bg-green-500'
-                            : 'border-gray-400'
-                        }`}
-                      >
-                        {(isSelected || showCorrectAnswer) && (
-                          <CheckCircle className="h-3 w-3 text-white" />
+                              : 'border-red-500 bg-red-500'
+                            : 'border-blue-500 bg-blue-500'
+                          : showCorrectAnswer && isCorrect
+                          ? 'border-green-500 bg-green-500'
+                          : 'border-gray-300'
+                      }`}>
+                        {(isSelected || (showCorrectAnswer && isCorrect)) && (
+                          <div className="w-2 h-2 rounded-full bg-white"></div>
                         )}
                       </div>
-                      <span className={`flex-1 ${
-                        showCorrectAnswer ? 'text-green-800 font-medium' : 
-                        showWrongAnswer ? 'text-red-800' : 'text-gray-800'
-                      }`}>
-                        {option}
+                      <span className="flex-1 text-gray-800">
+                        <MathJax>{option}</MathJax>
                       </span>
-                      {showResults && (
-                        <div className="flex items-center gap-1">
-                          {isCorrect && (
-                            <span className="text-green-600 text-sm font-medium">Correct</span>
-                          )}
-                          {showWrongAnswer && (
-                            <span className="text-red-600 text-sm font-medium">Your Choice</span>
-                          )}
-                        </div>
+                      {showCorrectAnswer && isCorrect && (
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      )}
+                      {showCorrectAnswer && isSelected && !isCorrect && (
+                        <AlertCircle className="h-4 w-4 text-red-600" />
                       )}
                     </div>
                   </div>
@@ -315,28 +341,26 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
               })}
             </div>
 
-            {/* Explanation (only show if results are visible and explanation exists) */}
+            {/* Show explanation if results are visible and explanation exists */}
             {showResults && question.explanation && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-medium text-blue-900 mb-2">Explanation:</h4>
-                <p className="text-blue-800 text-sm">{question.explanation}</p>
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <h4 className="font-medium text-yellow-800 mb-1">Explanation:</h4>
+                <div className="text-yellow-700 text-sm">
+                  <MathJax>{question.explanation}</MathJax>
+                </div>
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {/* Submit Button */}
-      <div className="mt-8 flex items-center justify-between">
-        <div className="text-sm text-gray-600">
-          {responses.filter(r => r !== -1).length} of {responses.length} questions answered
-        </div>
-        
+      {/* Submit Button or Status - matching AssignmentCreator button style */}
+      <div className="mt-8 flex items-center justify-center">
         {!isSubmitted ? (
           <button
             onClick={handleSubmit}
             disabled={isSubmitting || responses.includes(-1)}
-            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            className={`px-6 py-3 rounded-md font-medium transition-colors ${
               isSubmitting || responses.includes(-1)
                 ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
                 : 'bg-teal-600 text-white hover:bg-teal-700'
@@ -352,11 +376,11 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
             )}
           </button>
         ) : (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap justify-center">
             {canEdit && !showResults && (
               <button
                 onClick={() => setShowResults(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
                 View Results
               </button>
@@ -364,18 +388,21 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
             {canEdit && showResults && (
               <button
                 onClick={() => setShowResults(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
               >
                 Hide Results
               </button>
             )}
-            <span className="text-green-600 font-medium">Assignment Submitted Successfully!</span>
+            <span className="text-green-600 font-medium flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              Assignment Submitted Successfully!
+            </span>
           </div>
         )}
       </div>
 
-      {/* Instructions */}
-      <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+      {/* Instructions - matching AssignmentCreator style */}
+      <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-md">
         <h4 className="font-medium text-gray-900 mb-2">Instructions:</h4>
         <ul className="text-sm text-gray-700 space-y-1">
           <li>• Select one answer for single-answer questions</li>
