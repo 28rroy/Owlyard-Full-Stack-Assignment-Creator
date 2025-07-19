@@ -376,7 +376,7 @@ export default function Home() {
           >
             <StudentResultsViewer
               assignment={selectedAssignment}
-              onClose={() => {
+              onCloseAction={() => {
                 setShowStudentResults(false);
                 setSelectedAssignment(null);
               }}

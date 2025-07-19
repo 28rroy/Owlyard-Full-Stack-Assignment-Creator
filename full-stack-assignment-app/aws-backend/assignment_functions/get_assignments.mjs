@@ -72,51 +72,68 @@ export const handler = async (event) => {
                 })
             };
         } else {
-            // Get all assignments - IMPORTANT: Filter to exclude student responses
+            // Get all assignments - IMPROVED FILTERING
             console.log('Getting all assignments from table:', tableName);
             const command = new ScanCommand({
-                TableName: tableName,
-                FilterExpression: 'attribute_not_exists(#type) OR #type <> :responseType',
-                ExpressionAttributeNames: {
-                    '#type': 'type'
-                },
-                ExpressionAttributeValues: {
-                    ':responseType': 'assignment-response'
-                }
+                TableName: tableName
             });
             
             const response = await dynamodb.send(command);
-            const assignments = response.Items || [];
+            const allItems = response.Items || [];
             
-            console.log('Found assignments before filtering:', assignments.length);
+            console.log('Found total items before filtering:', allItems.length);
             
-            // Additional filtering to ensure we only get actual assignments
-            const actualAssignments = assignments.filter(item => {
-                // Must have assignmentId (not responseId)
-                // Must not be a student response type
-                return item.assignmentId && 
-                       !item.responseId && 
-                       (!item.type || item.type !== 'assignment-response') &&
-                       item.title && // Must have a title
-                       item.questions; // Must have questions
+            // Filter to get only actual assignments (exclude student responses)
+            const assignments = allItems.filter(item => {
+                // Student responses have responseId in format: student#ID#assignment#ID
+                if (item.responseId) {
+                    console.log('Filtering out student response:', item.responseId);
+                    return false;
+                }
+                
+                // Student responses have type = 'assignment-response'
+                if (item.type === 'assignment-response') {
+                    console.log('Filtering out response by type:', item.type);
+                    return false;
+                }
+                
+                // Items with assignmentId and title are likely assignments
+                if (item.assignmentId && item.title) {
+                    console.log('Keeping assignment:', item.assignmentId, item.title);
+                    return true;
+                }
+                
+                // Log items that don't match any criteria for debugging
+                console.log('Unknown item type:', {
+                    keys: Object.keys(item),
+                    hasAssignmentId: !!item.assignmentId,
+                    hasResponseId: !!item.responseId,
+                    hasTitle: !!item.title,
+                    type: item.type
+                });
+                
+                return false;
             });
             
-            console.log('Found actual assignments after filtering:', actualAssignments.length);
+            console.log('Found actual assignments after filtering:', assignments.length);
             
             // Sort by creation date (newest first)
-            actualAssignments.sort((a, b) => {
+            assignments.sort((a, b) => {
                 const dateA = new Date(a.createdAt || '');
                 const dateB = new Date(b.createdAt || '');
                 return dateB.getTime() - dateA.getTime();
             });
+            
+            // Log assignment titles for debugging
+            console.log('Assignment titles:', assignments.map(a => a.title));
             
             return {
                 statusCode: 200,
                 headers: corsHeaders,
                 body: JSON.stringify({
                     success: true,
-                    assignments: actualAssignments,
-                    count: actualAssignments.length
+                    assignments: assignments,
+                    count: assignments.length
                 })
             };
         }

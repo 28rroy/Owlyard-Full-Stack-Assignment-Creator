@@ -33,10 +33,10 @@ interface StudentResponse {
 
 interface StudentResultsViewerProps {
   assignment: Assignment;
-  onClose: () => void;
+  onCloseAction: () => void;
 }
 
-export const StudentResultsViewer = ({ assignment, onClose }: StudentResultsViewerProps) => {
+export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResultsViewerProps) => {
   const [studentResponses, setStudentResponses] = useState<StudentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<StudentResponse | null>(null);
@@ -171,7 +171,7 @@ export const StudentResultsViewer = ({ assignment, onClose }: StudentResultsView
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={onCloseAction}
             className="text-gray-500 hover:text-gray-700 text-xl font-bold"
           >
             <X className="h-6 w-6" />
