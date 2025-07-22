@@ -6,14 +6,10 @@ import { randomUUID } from "crypto";
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
 
-// ⭐ ENHANCED: Grade student response with detailed debugging
+// ⭐ NEW: Grade student response using secure correct answers
 async function gradeStudentResponse(studentResponses, assignmentId, assignmentOwnerId, tableName) {
     try {
-        console.log('🔍 GRADING DEBUG START');
-        console.log('🔍 Assignment ID:', assignmentId);
-        console.log('🔍 Assignment Owner ID:', assignmentOwnerId);
-        console.log('🔍 Table Name:', tableName);
-        console.log('🔍 Student Responses:', studentResponses);
+        console.log('Grading response for assignment:', assignmentId, 'owner:', assignmentOwnerId);
         
         // Get the complete assignment with correct answers for grading
         const assignmentCommand = new GetCommand({
@@ -24,69 +20,27 @@ async function gradeStudentResponse(studentResponses, assignmentId, assignmentOw
             }
         });
         
-        console.log('🔍 DynamoDB Query Key:', { 
-            userId: assignmentOwnerId, 
-            assignmentId: assignmentId 
-        });
-        
         const assignmentResponse = await dynamodb.send(assignmentCommand);
         
-        console.log('🔍 DynamoDB Response:', {
-            found: !!assignmentResponse.Item,
-            itemKeys: assignmentResponse.Item ? Object.keys(assignmentResponse.Item) : [],
-            hasCorrectAnswers: !!(assignmentResponse.Item?.correctAnswers),
-            actualUserId: assignmentResponse.Item?.userId,
-            actualAssignmentId: assignmentResponse.Item?.assignmentId,
-            type: assignmentResponse.Item?.type
-        });
-        
         if (!assignmentResponse.Item) {
-            console.error('❌ Assignment not found for grading');
-            console.error('❌ Searched with userId:', assignmentOwnerId, 'assignmentId:', assignmentId);
-            
-            // 🔍 TRY TO FIND THE ASSIGNMENT WITH A DIFFERENT APPROACH
-            console.log('🔍 Attempting to find assignment with scan...');
-            const scanCommand = new ScanCommand({
-                TableName: tableName,
-                FilterExpression: 'assignmentId = :assignmentId AND #type = :assignmentType',
-                ExpressionAttributeValues: {
-                    ':assignmentId': assignmentId,
-                    ':assignmentType': 'assignment'
-                },
-                ExpressionAttributeNames: {
-                    '#type': 'type'
-                }
-            });
-            
-            const scanResponse = await dynamodb.send(scanCommand);
-            console.log('🔍 Scan results:', scanResponse.Items?.map(item => ({
-                userId: item.userId,
-                assignmentId: item.assignmentId,
-                type: item.type,
-                hasCorrectAnswers: !!item.correctAnswers
-            })));
-            
+            console.error('Assignment not found for grading');
             return { score: 0, totalPoints: 0, details: [], error: 'Assignment not found' };
         }
         
         if (!assignmentResponse.Item.correctAnswers) {
-            console.error('❌ No correct answers found in assignment');
-            console.error('❌ Assignment data:', JSON.stringify(assignmentResponse.Item, null, 2));
+            console.error('No correct answers found in assignment');
             return { score: 0, totalPoints: 0, details: [], error: 'No correct answers available' };
         }
         
         const assignment = assignmentResponse.Item;
-        const correctAnswers = assignment.correctAnswers;
+        const correctAnswers = assignment.correctAnswers;  // ⭐ Secure correct answers
         const questions = assignment.questions;
         
         let score = 0;
         let totalPoints = 0;
         const gradingDetails = [];
         
-        console.log('✅ Successfully found assignment for grading');
-        console.log('✅ Correct answers keys:', Object.keys(correctAnswers));
-        console.log('✅ Questions keys:', Object.keys(questions || {}));
-        console.log('✅ Grading', Object.keys(correctAnswers).length, 'questions');
+        console.log('Grading', Object.keys(correctAnswers).length, 'questions');
         
         // Grade each question
         Object.entries(correctAnswers).forEach(([questionKey, correctData], index) => {
@@ -112,13 +66,12 @@ async function gradeStudentResponse(studentResponses, assignmentId, assignmentOw
                 pointsEarned: isCorrect ? questionPoints : 0
             });
             
-            console.log(`✅ Question ${questionKey}: Student answered ${studentAnswer}, correct options: [${correctOptions.join(',')}], ${isCorrect ? 'CORRECT' : 'INCORRECT'}`);
+            console.log(`Question ${questionKey}: Student answered ${studentAnswer}, correct options: [${correctOptions.join(',')}], ${isCorrect ? 'CORRECT' : 'INCORRECT'}`);
         });
         
         const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
         
-        console.log(`✅ Grading complete: ${score}/${totalPoints} points (${percentage}%)`);
-        console.log('🔍 GRADING DEBUG END');
+        console.log(`Grading complete: ${score}/${totalPoints} points (${percentage}%)`);
         
         return {
             score,
@@ -128,13 +81,12 @@ async function gradeStudentResponse(studentResponses, assignmentId, assignmentOw
         };
         
     } catch (error) {
-        console.error('❌ Error grading student response:', error);
-        console.error('❌ Error stack:', error.stack);
+        console.error('Error grading student response:', error);
         return { score: 0, totalPoints: 0, details: [], error: error.message };
     }
 }
 
-// ⭐ ENHANCED: Submit assignment response with detailed debugging
+// Submit assignment response with automatic grading
 async function submitResponse(event, tableName, corsHeaders) {
     try {
         let body;
@@ -150,16 +102,8 @@ async function submitResponse(event, tableName, corsHeaders) {
         
         const { userId, assignmentId, assignmentOwnerId, userAssignmentResponse } = body;
         
-        console.log('🔍 SUBMISSION DEBUG START');
-        console.log('🔍 Student userId:', userId);
-        console.log('🔍 Assignment ID:', assignmentId);
-        console.log('🔍 Assignment Owner ID:', assignmentOwnerId);
-        console.log('🔍 Student responses:', userAssignmentResponse);
-        console.log('🔍 Table name:', tableName);
-        
         // Validate required fields
         if (!userId || !assignmentId || !assignmentOwnerId || !userAssignmentResponse) {
-            console.error('❌ Missing required fields');
             return {
                 statusCode: 400,
                 headers: corsHeaders,
@@ -170,7 +114,6 @@ async function submitResponse(event, tableName, corsHeaders) {
         }
         
         if (!Array.isArray(userAssignmentResponse)) {
-            console.error('❌ userAssignmentResponse is not an array');
             return {
                 statusCode: 400,
                 headers: corsHeaders,
@@ -178,7 +121,7 @@ async function submitResponse(event, tableName, corsHeaders) {
             };
         }
         
-        console.log('✅ All required fields present and valid');
+        console.log('Submitting response from user:', userId, 'for assignment:', assignmentId);
         
         // ⭐ NEW: Grade the response securely using correct answers
         const gradingResult = await gradeStudentResponse(
@@ -189,7 +132,6 @@ async function submitResponse(event, tableName, corsHeaders) {
         );
         
         if (gradingResult.error) {
-            console.error('❌ Grading failed:', gradingResult.error);
             return {
                 statusCode: 400,
                 headers: corsHeaders,
@@ -197,31 +139,20 @@ async function submitResponse(event, tableName, corsHeaders) {
             };
         }
         
-        console.log('✅ Grading successful');
-        console.log('✅ Final score:', gradingResult.score, '/', gradingResult.totalPoints);
-        
         // Create response record with grading results
         const responseItem = {
-            userId: userId,
-            assignmentId: assignmentId,
-            assignmentOwnerId: assignmentOwnerId,
-            userAssignmentResponse: userAssignmentResponse,
-            score: gradingResult.score,
-            totalPoints: gradingResult.totalPoints,
-            percentage: gradingResult.percentage,
-            gradingDetails: gradingResult.details,
+            userId: userId,                          // Student who submitted
+            assignmentId: assignmentId,              // Assignment ID (sort key for responses)
+            assignmentOwnerId: assignmentOwnerId,    // Teacher who created the assignment
+            userAssignmentResponse: userAssignmentResponse, // Student's answers
+            score: gradingResult.score,              // ⭐ NEW: Calculated score
+            totalPoints: gradingResult.totalPoints,  // ⭐ NEW: Total possible points
+            percentage: gradingResult.percentage,    // ⭐ NEW: Percentage score
+            gradingDetails: gradingResult.details,   // ⭐ NEW: Detailed grading results
             submittedAt: new Date().toISOString(),
             status: 'submitted',
             type: 'response'
         };
-        
-        console.log('🔍 Saving response item:', {
-            userId: responseItem.userId,
-            assignmentId: responseItem.assignmentId,
-            assignmentOwnerId: responseItem.assignmentOwnerId,
-            score: responseItem.score,
-            totalPoints: responseItem.totalPoints
-        });
         
         // Save the graded response
         const putCommand = new PutCommand({
@@ -231,8 +162,8 @@ async function submitResponse(event, tableName, corsHeaders) {
         
         await dynamodb.send(putCommand);
         
-        console.log('✅ Assignment response submitted and graded successfully');
-        console.log('🔍 SUBMISSION DEBUG END');
+        console.log('Assignment response submitted and graded successfully');
+        console.log('Final score:', gradingResult.score, '/', gradingResult.totalPoints, `(${gradingResult.percentage}%)`);
         
         return {
             statusCode: 200,
@@ -249,8 +180,7 @@ async function submitResponse(event, tableName, corsHeaders) {
         };
         
     } catch (error) {
-        console.error('❌ Error submitting response:', error);
-        console.error('❌ Error stack:', error.stack);
+        console.error('Error submitting response:', error);
         return {
             statusCode: 500,
             headers: corsHeaders,
@@ -282,11 +212,6 @@ async function getResponse(event, tableName, corsHeaders) {
                     assignmentOwnerId: assignmentOwnerId
                 })
             };
-        }
-        
-        if (action === 'debug-db') {
-            // ⭐ NEW: Debug database contents
-            return await debugDynamoDBContents(event, tableName, corsHeaders);
         }
         
         if (userId && assignmentId) {
@@ -364,95 +289,6 @@ async function getResponse(event, tableName, corsHeaders) {
             headers: corsHeaders,
             body: JSON.stringify({ 
                 error: 'Failed to get assignment response',
-                message: error.message 
-            })
-        };
-    }
-}
-
-// ⭐ NEW: Debug database contents
-async function debugDynamoDBContents(event, tableName, corsHeaders) {
-    try {
-        console.log('🔍 DYNAMODB DEBUG SCAN START');
-        
-        // Get all assignments
-        const scanCommand = new ScanCommand({
-            TableName: tableName,
-            FilterExpression: '#type = :assignmentType',
-            ExpressionAttributeValues: {
-                ':assignmentType': 'assignment'
-            },
-            ExpressionAttributeNames: {
-                '#type': 'type'
-            }
-        });
-        
-        const scanResponse = await dynamodb.send(scanCommand);
-        
-        console.log('🔍 Found', scanResponse.Items?.length || 0, 'assignments in database');
-        
-        scanResponse.Items?.forEach((item, index) => {
-            console.log(`🔍 Assignment ${index + 1}:`, {
-                userId: item.userId,
-                assignmentId: item.assignmentId,
-                assignmentOwnerId: item.assignmentOwnerId,
-                title: item.title,
-                type: item.type,
-                hasCorrectAnswers: !!item.correctAnswers,
-                correctAnswersKeys: item.correctAnswers ? Object.keys(item.correctAnswers) : [],
-                questionsCount: item.questions ? Object.keys(item.questions).length : 0,
-                createdAt: item.createdAt
-            });
-        });
-        
-        // Also get any responses
-        const responseScanCommand = new ScanCommand({
-            TableName: tableName,
-            FilterExpression: '#type = :responseType',
-            ExpressionAttributeValues: {
-                ':responseType': 'response'
-            },
-            ExpressionAttributeNames: {
-                '#type': 'type'
-            }
-        });
-        
-        const responseScanResponse = await dynamodb.send(responseScanCommand);
-        
-        console.log('🔍 Found', responseScanResponse.Items?.length || 0, 'responses in database');
-        
-        responseScanResponse.Items?.forEach((item, index) => {
-            console.log(`🔍 Response ${index + 1}:`, {
-                userId: item.userId,
-                assignmentId: item.assignmentId,
-                assignmentOwnerId: item.assignmentOwnerId,
-                score: item.score,
-                totalPoints: item.totalPoints,
-                submittedAt: item.submittedAt
-            });
-        });
-        
-        console.log('🔍 DYNAMODB DEBUG SCAN END');
-        
-        return {
-            statusCode: 200,
-            headers: corsHeaders,
-            body: JSON.stringify({
-                success: true,
-                assignments: scanResponse.Items || [],
-                responses: responseScanResponse.Items || [],
-                assignmentCount: scanResponse.Items?.length || 0,
-                responseCount: responseScanResponse.Items?.length || 0
-            })
-        };
-        
-    } catch (error) {
-        console.error('❌ Error debugging DynamoDB:', error);
-        return {
-            statusCode: 500,
-            headers: corsHeaders,
-            body: JSON.stringify({ 
-                error: 'Failed to debug DynamoDB',
                 message: error.message 
             })
         };

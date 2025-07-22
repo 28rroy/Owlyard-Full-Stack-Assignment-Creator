@@ -128,7 +128,7 @@ export const handler = async (event) => {
         // ⭐ NEW: Separate student data from correct answers
         const { studentFacingQuestions, correctAnswersVector } = processQuestionsForStorage(questions);
         
-        // ⭐ UPDATED: Prepare item with correct structure and separated correct answers
+// ⭐ UPDATED: Prepare item with correct structure and separated correct answers
         const assignmentItem = {
             userId: userId,                    // PARTITION KEY - who created the assignment
             assignmentId: assignmentId,        // SORT KEY - unique assignment identifier
@@ -140,7 +140,8 @@ export const handler = async (event) => {
             metadata: metadata || { totalQuestions: questionCount },
             totalQuestions: questionCount,
             status: 'active',
-            type: 'assignment'                 // To distinguish from user responses
+            type: 'assignment',                 // To distinguish from user responses
+            isDraft: false                      // ⭐ NEW: Set to false when submit button is clicked
         };
         
         // Get DynamoDB table name from environment variable

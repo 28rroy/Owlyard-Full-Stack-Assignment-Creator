@@ -90,10 +90,11 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
       Object.entries(editingAssignment.questions).forEach(([key, question]) => {
         console.log(`🔍 Processing question ${key}:`, question);
         
-        // Handle both correctOptions (new format) and correctAnswers (legacy format) safely
-        const correctOptions = question.correctOptions || 
-                              (question as any).correctAnswers || 
-                              [];
+        // 🔍 FIX: Get correct answers from the assignment-level correctAnswers field
+        const assignmentCorrectAnswers = (editingAssignment as any).correctAnswers;
+        const correctOptions = assignmentCorrectAnswers && assignmentCorrectAnswers[key] 
+          ? assignmentCorrectAnswers[key].correctOptions || []
+          : [];
         
         console.log(`🔍 Correct options for question ${key}:`, correctOptions);
         
@@ -105,32 +106,26 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           correctCount: Array.isArray(correctOptions) ? correctOptions.length : 0,
           correctAnswers: Array.isArray(correctOptions) ? correctOptions : [],
           explanation: question.explanation || "",
-          showExplanation: (question.explanation || "").length > 0,
+          showExplanation: !!question.explanation,
           showQuestionPreview: false,
-          showOptionPreviews: [],
+          showOptionPreviews: new Array(question.options?.length || 0).fill(false),
           showExplanationPreview: false,
-          points: question.points || 1
+          points: question.points || 1,
         };
         
         console.log(`🔍 Form question ${key} created:`, {
-          correctCount: formQuestion.correctCount,
           correctAnswers: formQuestion.correctAnswers,
+          correctCount: formQuestion.correctCount,
           options: formQuestion.options.length
         });
         
         formQuestions.push(formQuestion);
-        optionCounts.push((question.options || []).length);
+        optionCounts.push(question.options?.length || 0);
       });
       
       console.log('🔍 Final form questions:', formQuestions);
       setQuestions(formQuestions);
       setNumOptions(optionCounts);
-    } else {
-      // Reset for new assignment
-      setIsEditing(false);
-      setAssignmentTitle("");
-      setQuestions([defaultQuestion()]);
-      setNumOptions([0]);
     }
   }, [editingAssignment]);
 
