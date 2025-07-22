@@ -279,326 +279,331 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
   };
 
   return (
-    <div
-      className="w-11/12 h-full overflow-y-auto pr-3 scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100"
-      style={{ WebkitOverflowScrolling: "touch" }}
-    >
-      <h1 className="text-2xl font-bold text-teal-800 mb-4 text-center">
-        {isEditing ? 'Edit Assignment' : 'Assignment Creator'}
-      </h1>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Content Area - Full Height with Scroll */}
+      <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold text-teal-800 mb-6 text-center">
+            {isEditing ? 'Edit Assignment' : 'Assignment Creator'}
+          </h1>
 
-      {/* Assignment Title */}
-      <div className="mb-6 p-4 bg-blue-50 rounded-md border">
-        <div className="flex items-center justify-between mb-2">
-          <label className="block text-teal-800 font-medium">
-            Assignment Title *
-          </label>
-          <LatexHelp />
-        </div>
-        <input
-          type="text"
-          placeholder="Enter assignment title"
-          value={assignmentTitle}
-          onChange={(e) => setAssignmentTitle(e.target.value)}
-          className="w-full p-3 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500"
-          required
-        />
-      </div>
-
-      {questions.map((q, qIndex) => (
-        <div
-          key={qIndex}
-          className="space-y-4 border border-gray-200 p-4 rounded-md bg-white shadow-sm mb-6"
-        >
-          <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
-
-          {/* Question Input */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-teal-800 font-medium">Question Text *</label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => updateQuestion(qIndex, { showQuestionPreview: !q.showQuestionPreview })}
-                  className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
-                >
-                  <Eye className="h-3 w-3" />
-                  {q.showQuestionPreview ? 'Hide' : 'Show'} Preview
-                </button>
-              </div>
+          {/* Assignment Title */}
+          <div className="mb-6 p-4 bg-blue-50 rounded-md border">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-teal-800 font-medium">
+                Assignment Title *
+              </label>
+              <LatexHelp />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1">
-                <textarea
-                  placeholder="Enter question (supports LaTeX: $x^2$ for inline, $x^2$ for display)"
-                  value={q.question}
-                  onChange={(e) => {
-                    if (e.target.value.length <= MAX_QUESTION_LENGTH) {
-                      updateQuestion(qIndex, { question: e.target.value });
-                    }
-                  }}
-                  readOnly={!q.questionEditable}
-                  className={`w-full p-2 border rounded-md text-gray-800 ${
-                    !q.questionEditable ? "bg-gray-100" : ""
-                  }`}
-                  maxLength={MAX_QUESTION_LENGTH}
-                  rows={3}
-                />
-                <div className="text-xs text-gray-500 mt-1">
-                  {q.question.length}/{MAX_QUESTION_LENGTH} characters
-                </div>
-              </div>
-              {q.questionEditable ? (
-                <button 
-                  onClick={() => updateQuestion(qIndex, { questionEditable: false })} 
-                  title="Save"
-                  className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors"
-                >
-                  <Check className="h-5 w-5" />
-                </button>
-              ) : (
-                <button 
-                  onClick={() => updateQuestion(qIndex, { questionEditable: true })} 
-                  title="Edit"
-                  className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
-                >
-                  <Pencil className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-            
-            {/* Question Preview */}
-            {q.showQuestionPreview && q.question && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                <div className="text-xs text-yellow-800 font-medium mb-2">LaTeX Preview:</div>
-                <MathJax className="text-gray-800">{q.question}</MathJax>
-              </div>
-            )}
-          </div>
-
-          {/* Point Value */}
-          <div className="flex items-center gap-2">
-            <label className="text-teal-800 font-medium">
-              Point Value:
-            </label>
             <input
-              type="number"
-              min="0"
-              max="100"
-              value={q.points}
-              onChange={(e) => updateQuestion(qIndex, { points: parseInt(e.target.value) || 1 })}
-              className="w-20 p-2 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500"
+              type="text"
+              placeholder="Enter assignment title"
+              value={assignmentTitle}
+              onChange={(e) => setAssignmentTitle(e.target.value)}
+              className="w-full p-3 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500"
+              required
             />
-            <span className="text-gray-600 text-sm">points</span>
           </div>
 
-          {/* Number of Options */}
-          <label className="block text-teal-800 font-medium">
-            How many choices?
-            <select
-              className="ml-2 p-2 border rounded-md"
-              onChange={(e) => handleNumOptionsChange(qIndex, parseInt(e.target.value))}
-              value={q.options.length}
+          {/* Questions */}
+          {questions.map((q, qIndex) => (
+            <div
+              key={qIndex}
+              className="space-y-4 border border-gray-200 p-4 rounded-md bg-white shadow-sm mb-6"
             >
-              <option value={0}>Select</option>
-              {[2, 3, 4, 5].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+              <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
 
-          {/* Options */}
-          {q.options.map((opt, i) => (
-            <div key={i} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-700">Option {i + 1}</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newPreviews = [...(q.showOptionPreviews || [])];
-                    newPreviews[i] = !newPreviews[i];
-                    updateQuestion(qIndex, { showOptionPreviews: newPreviews });
-                  }}
-                  className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
-                >
-                  <Eye className="h-3 w-3" />
-                  {q.showOptionPreviews?.[i] ? 'Hide' : 'Show'} Preview
-                </button>
-              </div>
-              <input
-                type="text"
-                value={opt}
-                readOnly={!q.optionsEditable}
-                onChange={(e) => {
-                  if (e.target.value.length <= MAX_OPTION_LENGTH) {
-                    handleOptionChange(qIndex, i, e.target.value);
-                  }
-                }}
-                placeholder={`Option ${i + 1} (supports LaTeX: $x^2$)`}
-                className={`w-full p-2 border rounded-md text-gray-900 ${
-                  !q.optionsEditable ? "bg-gray-100" : ""
-                }`}
-                maxLength={MAX_OPTION_LENGTH}
-              />
-              <div className="text-xs text-gray-500">
-                {opt.length}/{MAX_OPTION_LENGTH} characters
-              </div>
-              
-              {/* Option Preview */}
-              {q.showOptionPreviews?.[i] && opt && (
-                <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
-                  <div className="text-xs text-blue-800 font-medium mb-1">LaTeX Preview:</div>
-                  <MathJax className="text-gray-800">{opt}</MathJax>
+              {/* Question Input */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-teal-800 font-medium">Question Text *</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateQuestion(qIndex, { showQuestionPreview: !q.showQuestionPreview })}
+                      className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
+                    >
+                      <Eye className="h-3 w-3" />
+                      {q.showQuestionPreview ? 'Hide' : 'Show'} Preview
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <textarea
+                      placeholder="Enter question (supports LaTeX: $x^2$ for inline, $x^2$ for display)"
+                      value={q.question}
+                      onChange={(e) => {
+                        if (e.target.value.length <= MAX_QUESTION_LENGTH) {
+                          updateQuestion(qIndex, { question: e.target.value });
+                        }
+                      }}
+                      readOnly={!q.questionEditable}
+                      className={`w-full p-2 border rounded-md text-gray-800 ${
+                        !q.questionEditable ? "bg-gray-100" : ""
+                      }`}
+                      maxLength={MAX_QUESTION_LENGTH}
+                      rows={3}
+                    />
+                    <div className="text-xs text-gray-500 mt-1">
+                      {q.question.length}/{MAX_QUESTION_LENGTH} characters
+                    </div>
+                  </div>
+                  {q.questionEditable ? (
+                    <button 
+                      onClick={() => updateQuestion(qIndex, { questionEditable: false })} 
+                      title="Save"
+                      className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors"
+                    >
+                      <Check className="h-5 w-5" />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => updateQuestion(qIndex, { questionEditable: true })} 
+                      title="Edit"
+                      className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+                    >
+                      <Pencil className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+                
+                {/* Question Preview */}
+                {q.showQuestionPreview && q.question && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <div className="text-xs text-yellow-800 font-medium mb-2">LaTeX Preview:</div>
+                    <MathJax className="text-gray-800">{q.question}</MathJax>
+                  </div>
+                )}
+              </div>
 
-          {/* Save/Edit Buttons for Options */}
-          {q.options.length > 0 && (
-            <div className="flex items-center justify-between mt-4">
-              <p className="text-teal-800 font-medium">Answer Choices:</p>
-              {q.optionsEditable ? (
-                <button 
-                  onClick={() => updateQuestion(qIndex, { optionsEditable: false })} 
-                  title="Save"
-                  className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors"
-                >
-                  <Check className="h-5 w-5" />
-                </button>
-              ) : (
-                <button 
-                  onClick={() => updateQuestion(qIndex, { optionsEditable: true })} 
-                  title="Edit"
-                  className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
-                >
-                  <Pencil className="h-5 w-5" />
-                </button>
-              )}
-            </div>
-          )}
+              {/* Point Value */}
+              <div className="flex items-center gap-2">
+                <label className="text-teal-800 font-medium">
+                  Point Value:
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={q.points}
+                  onChange={(e) => updateQuestion(qIndex, { points: parseInt(e.target.value) || 1 })}
+                  className="w-20 p-2 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500"
+                />
+                <span className="text-gray-600 text-sm">points</span>
+              </div>
 
-          {/* Correct Answer Count and Selection */}
-          {q.options.length > 0 && (
-            <>
-              <label className="block mt-4 text-teal-800 font-medium">
-                How many correct options?
+              {/* Number of Options */}
+              <label className="block text-teal-800 font-medium">
+                How many choices?
                 <select
                   className="ml-2 p-2 border rounded-md"
-                  value={q.correctCount}
-                  onChange={(e) => {
-                    const count = parseInt(e.target.value);
-                    updateQuestion(qIndex, {
-                      correctCount: count,
-                      correctAnswers: Array(count).fill(-1),
-                    });
-                  }}
+                  onChange={(e) => handleNumOptionsChange(qIndex, parseInt(e.target.value))}
+                  value={q.options.length}
                 >
                   <option value={0}>Select</option>
-                  {[...Array(q.options.length).keys()].map((n) => (
-                    <option key={n + 1} value={n + 1}>
-                      {n + 1}
+                  {[2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
                     </option>
                   ))}
                 </select>
               </label>
 
-              {q.correctAnswers.map((val, idx) => (
-                <div key={idx}>
-                  <label className="text-teal-700">
-                    Correct Option {idx + 1}:
+              {/* Options */}
+              {q.options.map((opt, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm text-gray-700">Option {i + 1}</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newPreviews = [...(q.showOptionPreviews || [])];
+                        newPreviews[i] = !newPreviews[i];
+                        updateQuestion(qIndex, { showOptionPreviews: newPreviews });
+                      }}
+                      className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
+                    >
+                      <Eye className="h-3 w-3" />
+                      {q.showOptionPreviews?.[i] ? 'Hide' : 'Show'} Preview
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={opt}
+                    readOnly={!q.optionsEditable}
+                    onChange={(e) => {
+                      if (e.target.value.length <= MAX_OPTION_LENGTH) {
+                        handleOptionChange(qIndex, i, e.target.value);
+                      }
+                    }}
+                    placeholder={`Option ${i + 1} (supports LaTeX: $x^2$)`}
+                    className={`w-full p-2 border rounded-md text-gray-900 ${
+                      !q.optionsEditable ? "bg-gray-100" : ""
+                    }`}
+                    maxLength={MAX_OPTION_LENGTH}
+                  />
+                  <div className="text-xs text-gray-500">
+                    {opt.length}/{MAX_OPTION_LENGTH} characters
+                  </div>
+                  
+                  {/* Option Preview */}
+                  {q.showOptionPreviews?.[i] && opt && (
+                    <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="text-xs text-blue-800 font-medium mb-1">LaTeX Preview:</div>
+                      <MathJax className="text-gray-800">{opt}</MathJax>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Save/Edit Buttons for Options */}
+              {q.options.length > 0 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-teal-800 font-medium">Answer Choices:</p>
+                  {q.optionsEditable ? (
+                    <button 
+                      onClick={() => updateQuestion(qIndex, { optionsEditable: false })} 
+                      title="Save"
+                      className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-md transition-colors"
+                    >
+                      <Check className="h-5 w-5" />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => updateQuestion(qIndex, { optionsEditable: true })} 
+                      title="Edit"
+                      className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+                    >
+                      <Pencil className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Correct Answer Count and Selection */}
+              {q.options.length > 0 && (
+                <>
+                  <label className="block mt-4 text-teal-800 font-medium">
+                    How many correct options?
                     <select
                       className="ml-2 p-2 border rounded-md"
-                      value={val}
+                      value={q.correctCount}
                       onChange={(e) => {
-                        const updated = [...q.correctAnswers];
-                        updated[idx] = parseInt(e.target.value);
-                        updateQuestion(qIndex, { correctAnswers: updated });
+                        const count = parseInt(e.target.value);
+                        updateQuestion(qIndex, {
+                          correctCount: count,
+                          correctAnswers: Array(count).fill(-1),
+                        });
                       }}
                     >
-                      <option value={-1}>Select</option>
-                      {q.options.map((_, i) => (
-                        <option key={i} value={i}>
-                          Option {i + 1}
+                      <option value={0}>Select</option>
+                      {[...Array(q.options.length).keys()].map((n) => (
+                        <option key={n + 1} value={n + 1}>
+                          {n + 1}
                         </option>
                       ))}
                     </select>
                   </label>
-                </div>
-              ))}
-            </>
-          )}
 
-          {/* Explanation */}
-          <div>
-            <button
-              onClick={() => updateQuestion(qIndex, { showExplanation: true })}
-              className="mt-4 bg-orange-400 text-white px-3 py-2 rounded-md hover:bg-orange-500 transition"
-            >
-              + Add Explanation
-            </button>
-            {q.showExplanation && (
-              <div className="mt-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm text-gray-700">Explanation (optional)</label>
-                  <button
-                    type="button"
-                    onClick={() => updateQuestion(qIndex, { showExplanationPreview: !q.showExplanationPreview })}
-                    className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
-                  >
-                    <Eye className="h-3 w-3" />
-                    {q.showExplanationPreview ? 'Hide' : 'Show'} Preview
-                  </button>
-                </div>
-                <textarea
-                  value={q.explanation}
-                  onChange={(e) => updateQuestion(qIndex, { explanation: e.target.value })}
-                  placeholder="Enter explanation (supports LaTeX: $x^2$ for inline, $x^2$ for display)"
-                  className="w-full p-2 border rounded-md text-gray-900"
-                  rows={3}
-                />
-                
-                {/* Explanation Preview */}
-                {q.showExplanationPreview && q.explanation && (
-                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
-                    <div className="text-xs text-orange-800 font-medium mb-2">LaTeX Preview:</div>
-                    <MathJax className="text-gray-800">{q.explanation}</MathJax>
+                  {q.correctAnswers.map((val, idx) => (
+                    <div key={idx}>
+                      <label className="text-teal-700">
+                        Correct Option {idx + 1}:
+                        <select
+                          className="ml-2 p-2 border rounded-md"
+                          value={val}
+                          onChange={(e) => {
+                            const updated = [...q.correctAnswers];
+                            updated[idx] = parseInt(e.target.value);
+                            updateQuestion(qIndex, { correctAnswers: updated });
+                          }}
+                        >
+                          <option value={-1}>Select</option>
+                          {q.options.map((_, i) => (
+                            <option key={i} value={i}>
+                              Option {i + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {/* Explanation */}
+              <div>
+                <button
+                  onClick={() => updateQuestion(qIndex, { showExplanation: true })}
+                  className="mt-4 bg-orange-400 text-white px-3 py-2 rounded-md hover:bg-orange-500 transition"
+                >
+                  + Add Explanation
+                </button>
+                {q.showExplanation && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm text-gray-700">Explanation (optional)</label>
+                      <button
+                        type="button"
+                        onClick={() => updateQuestion(qIndex, { showExplanationPreview: !q.showExplanationPreview })}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
+                      >
+                        <Eye className="h-3 w-3" />
+                        {q.showExplanationPreview ? 'Hide' : 'Show'} Preview
+                      </button>
+                    </div>
+                    <textarea
+                      value={q.explanation}
+                      onChange={(e) => updateQuestion(qIndex, { explanation: e.target.value })}
+                      placeholder="Enter explanation (supports LaTeX: $x^2$ for inline, $x^2$ for display)"
+                      className="w-full p-2 border rounded-md text-gray-900"
+                      rows={3}
+                    />
+                    
+                    {/* Explanation Preview */}
+                    {q.showExplanationPreview && q.explanation && (
+                      <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
+                        <div className="text-xs text-orange-800 font-medium mb-2">LaTeX Preview:</div>
+                        <MathJax className="text-gray-800">{q.explanation}</MathJax>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
 
-      {/* Add Question + Save Buttons */}
-      <div className="flex justify-between gap-4 mt-6">
-        <button
-          onClick={handleNextQuestion}
-          disabled={questions.length >= MAX_QUESTIONS}
-          className={`px-4 py-2 rounded transition ${
-            questions.length >= MAX_QUESTIONS
-              ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-              : 'bg-red-400 text-white hover:bg-red-500'
-          }`}
-        >
-          + Add Question ({questions.length}/{MAX_QUESTIONS})
-        </button>
-        <button
-          onClick={handleSaveAssignment}
-          disabled={!isAssignmentValid() || isSaving}
-          className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-            isAssignmentValid() && !isSaving
-              ? 'bg-teal-600 text-white hover:bg-teal-700'
-              : 'bg-teal-600 text-white cursor-not-allowed'
-          }`}
-        >
-          <Save size={20}/>
-          {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
-        </button>
+      {/* Fixed Footer with Buttons */}
+      <div className="border-t bg-white p-4 flex-shrink-0">
+        <div className="max-w-4xl mx-auto flex justify-between gap-4">
+          <button
+            onClick={handleNextQuestion}
+            disabled={questions.length >= MAX_QUESTIONS}
+            className={`px-4 py-2 rounded transition ${
+              questions.length >= MAX_QUESTIONS
+                ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                : 'bg-red-400 text-white hover:bg-red-500'
+            }`}
+          >
+            + Add Question ({questions.length}/{MAX_QUESTIONS})
+          </button>
+          <button
+            onClick={handleSaveAssignment}
+            disabled={!isAssignmentValid() || isSaving}
+            className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+              isAssignmentValid() && !isSaving
+                ? 'bg-teal-600 text-white hover:bg-teal-700'
+                : 'bg-gray-400 text-gray-600 cursor-not-allowed'
+            }`}
+          >
+            <Save size={20}/>
+            {isSaving ? (isEditing ? 'Updating...' : 'Saving...') : (isEditing ? 'Update' : 'Save')}
+          </button>
+        </div>
       </div>
     </div>
   );
-};
+}

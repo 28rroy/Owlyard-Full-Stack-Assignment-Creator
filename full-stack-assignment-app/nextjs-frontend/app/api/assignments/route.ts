@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Validation constants
+// Validation constants (must match backend)
 const MAX_QUESTION_LENGTH = 1000;
 const MAX_OPTION_LENGTH = 500;
 const MAX_QUESTIONS = 100;
 
-// Interface for assignment data
-interface AssignmentQuestion {
+// ⭐ Add proper typing for the assignment data structure
+interface QuestionData {
   question: string;
   options: string[];
   correctOptions: number[];
@@ -16,35 +16,36 @@ interface AssignmentQuestion {
 
 interface AssignmentData {
   title: string;
-  questions: { [key: string]: AssignmentQuestion };
-  createdAt: string;
-  metadata: any;
+  questions: { [key: string]: QuestionData };
+  userId: string;
+  assignmentOwnerId: string;
+  createdAt?: string;
+  metadata?: any;
+  assignmentId?: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const assignmentData: AssignmentData = await request.json();
     
-    // console.log('Received assignment data:', JSON.stringify(assignmentData, null, 2));
-    
-    // Validate the data
-    if (!assignmentData.title || !assignmentData.questions) {
+    // Validate the assignment data
+    if (!assignmentData.title || !assignmentData.questions || !assignmentData.userId) {
       return NextResponse.json(
-        { error: 'Missing required fields: title and questions' },
+        { error: 'Missing required fields: title, questions, userId' },
         { status: 400 }
       );
     }
 
-    // Validate question limits
+    // Validate question count
     const questionCount = Object.keys(assignmentData.questions).length;
-    if (questionCount > MAX_QUESTIONS) {
+    if (questionCount === 0 || questionCount > MAX_QUESTIONS) {
       return NextResponse.json(
-        { error: `Maximum ${MAX_QUESTIONS} questions allowed. Received ${questionCount} questions.` },
+        { error: `Invalid number of questions. Must be between 1 and ${MAX_QUESTIONS}. Received ${questionCount} questions.` },
         { status: 400 }
       );
     }
 
-    // Validate question and option lengths
+    // ⭐ UPDATED: Validate question and option lengths with proper typing
     for (const [questionKey, questionData] of Object.entries(assignmentData.questions)) {
       if (questionData.question && questionData.question.length > MAX_QUESTION_LENGTH) {
         return NextResponse.json(
@@ -68,12 +69,8 @@ export async function POST(request: NextRequest) {
     // Get your API Gateway URL from environment variables
     const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
     
-    // console.log('Raw environment variable:', process.env.NEXT_PUBLIC_API_GATEWAY_URL);
-    // console.log('API Gateway URL:', apiGatewayUrl);
-
     // Check if environment variable is properly set
     if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL' || apiGatewayUrl.includes('your-api-id')) {
-      // console.error('Environment variable not properly set:', apiGatewayUrl);
       return NextResponse.json(
         { 
           error: 'API Gateway URL not configured properly',
@@ -85,7 +82,6 @@ export async function POST(request: NextRequest) {
     }
     
     const fullUrl = `${apiGatewayUrl}/save-assignment`;
-    // console.log('Full URL:', fullUrl);
     
     // Call your Lambda function via API Gateway
     const response = await fetch(fullUrl, {
@@ -96,32 +92,97 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(assignmentData),
     });
 
-    // console.log('Response status:', response.status);
-    // console.log('Response ok:', response.ok);
-
     const result = await response.json();
-    // console.log('Response body:', result);
 
     if (!response.ok) {
-      // console.error('API response not ok:', result);
       throw new Error(result.error || result.message || `HTTP ${response.status}: Failed to save assignment`);
     }
 
     return NextResponse.json(result);
 
   } catch (error: unknown) {
-    // console.error('Error saving assignment:', error);
+    console.error('Error saving assignment:', error);
     
     // Type-safe error handling
     const errorMessage = error instanceof Error ? error.message : 'Internal server error';
-    const errorCause = error instanceof Error && error.cause ? String(error.cause) : 'No additional details';
-    
-    // Return detailed error information
+    const errorCause = error instanceof Error && error.cause ? 
+      ` Cause: ${JSON.stringify(error.cause)}` : '';
+      
     return NextResponse.json(
-      { 
-        error: errorMessage,
-        details: errorCause,
-        apiUrl: process.env.NEXT_PUBLIC_API_GATEWAY_URL
+      {
+        error: 'Failed to save assignment',
+        message: errorMessage + errorCause,
+        timestamp: new Date().toISOString()
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    const requestingUserId = searchParams.get('requestingUserId');
+    const userRole = searchParams.get('userRole');
+    
+    // Get your API Gateway URL from environment variables
+    const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
+    
+    if (!apiGatewayUrl) {
+      return NextResponse.json(
+        { error: 'API Gateway URL not configured' },
+        { status: 500 }
+      );
+    }
+    
+    // ⭐ NEW: Build URL with security parameters
+    let fullUrl = `${apiGatewayUrl}/get-assignments`;
+    const params = new URLSearchParams();
+    
+    if (userId) params.append('userId', userId);
+    if (requestingUserId) params.append('requestingUserId', requestingUserId);
+    if (userRole) params.append('userRole', userRole);
+    
+    if (params.toString()) {
+      fullUrl += `?${params.toString()}`;
+    }
+    
+    console.log('Fetching assignments from:', fullUrl);
+    
+    // Call your Lambda function via API Gateway
+    const response = await fetch(fullUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || result.message || `HTTP ${response.status}: Failed to get assignments`);
+    }
+
+    // ⭐ NEW: Log security verification
+    if (result.dataType === 'student-safe') {
+      console.log('✅ Returning student-safe data (no correct answers)');
+    } else if (result.dataType === 'complete') {
+      console.log('✅ Returning complete data for teacher/grading');
+    }
+
+    return NextResponse.json(result);
+
+  } catch (error: unknown) {
+    console.error('Error getting assignments:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    
+    return NextResponse.json(
+      {
+        error: 'Failed to get assignments',
+        message: errorMessage,
+        timestamp: new Date().toISOString()
       },
       { status: 500 }
     );

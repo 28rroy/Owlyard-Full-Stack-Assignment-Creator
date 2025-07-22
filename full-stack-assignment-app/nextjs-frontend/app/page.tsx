@@ -7,26 +7,11 @@ import { StudentResultsViewer } from '@/components/StudentResultsViewer';
 import { useUser } from '@/contexts/UserContext';
 import { X, Pencil, Eye, Play, User, BarChart3, GraduationCap, Users } from 'lucide-react';
 
-// Types for assignment data
-interface AssignmentQuestion {
-  question: string;
-  options: string[];
-  correctOptions: number[];
-  explanation: string;
-  points: number;
-}
+// Import types for compatibility
+import { Assignment, CleanAssignment, cleanToComponentAssignment, verifyStudentDataSecurity } from '@/types';
 
-interface Assignment {
-  userId: string;
-  assignmentId: string;
-  assignmentOwnerId: string;
-  title: string;
-  questions: { [key: string]: AssignmentQuestion };
-  createdAt: string;
-  totalQuestions: number;
-  status: string;
-  type: string;
-}
+// ⭐ Keep original Assignment interface for component compatibility - remove the conflicting type definitions
+// Remove the interface definitions that were causing conflicts
 
 export default function Home() {
   const { userId, isTeacher, assignmentOwnerId } = useUser();
@@ -51,45 +36,72 @@ export default function Home() {
     return () => window.removeEventListener("close-assignment-modal", handler);
   }, []);
 
-  // Fetch assignments from API with userId
+  // ⭐ NEW: Security verification function
+  const verifyDataSecurity = (assignment: Assignment, userMode: 'teacher' | 'student') => {
+    if (userMode === 'student') {
+      return verifyStudentDataSecurity(assignment);
+    }
+    return true;
+  };
+
+  // ⭐ UPDATED: Fetch assignments with security parameters
   const fetchAssignments = async () => {
     setLoading(true);
     console.log('🔍 FRONTEND DEBUG: Starting to fetch assignments...');
     console.log('🔍 Using userId:', userId);
-    console.log('🔍 Current time:', new Date().toISOString());
+    console.log('🔍 User mode:', userMode);
     
     try {
-      // For teachers, get their assignments; for students, get all assignments
+      // ⭐ NEW: Include user role and security parameters in request
       const url = userMode === 'teacher' 
-        ? `/api/get-assignments?userId=${userId}`
-        : '/api/get-assignments'; // All assignments for students
-        
+        ? `/api/assignments?userId=${userId}&requestingUserId=${userId}&userRole=teacher`
+        : `/api/assignments?requestingUserId=${userId}&userRole=student`;
+      
       console.log('🔍 Fetching from URL:', url);
       
       const response = await fetch(url);
-      console.log('🔍 Response status:', response.status);
-      console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
       
       if (response.ok) {
         const data = await response.json();
-        console.log('🔍 Raw response data:', data);
-        console.log('🔍 Assignments received:', data.assignments?.length || 0);
+        console.log('✅ Assignments fetched successfully:', data);
         
-        if (data.assignments && data.assignments.length > 0) {
-          console.log('🔍 Assignment details:');
-          data.assignments.forEach((assignment: Assignment, index: number) => {
-            console.log(`  ${index + 1}. ID: ${assignment.assignmentId}, Title: "${assignment.title}", Owner: ${assignment.assignmentOwnerId}`);
-          });
-        } else {
+        if (data.assignments && Array.isArray(data.assignments)) {
+          console.log(`✅ Found ${data.assignments.length} assignments`);
+          console.log('🔍 Data type received:', data.dataType); // ⭐ NEW: Shows if data is clean or complete
+          
+          // ⭐ NEW: Convert clean assignments to component-compatible format if needed
+          let processedAssignments: Assignment[] = data.assignments;
+          
+          if (data.dataType === 'student-safe') {
+            processedAssignments = data.assignments.map((assignment: any) => 
+              cleanToComponentAssignment(assignment as CleanAssignment)
+            );
+          } else {
           console.log('❌ NO ASSIGNMENTS RETURNED from API');
         }
         
-        // Check for debug info
+        // Check for debug info from backend
         if (data.debug) {
           console.log('🔍 Debug info from backend:', data.debug);
         }
-        
-        setAssignments(data.assignments || []);
+          
+          processedAssignments.forEach((assignment: Assignment) => {
+            console.log(`📄 Assignment ID: ${assignment.assignmentId}, Title: "${assignment.title}", Owner: ${assignment.assignmentOwnerId}`);
+            
+            // ⭐ NEW: Security verification - ensure correct answers are not present in student data
+            if (userMode === 'student') {
+              if (!verifyDataSecurity(assignment, 'student')) {
+                alert('Security Error: Please contact administrator');
+              } else {
+                console.log('✅ Student data is secure - no correct answers exposed');
+              }
+            } else {
+              console.log('📚 Teacher data includes complete assignment information');
+            }
+          });
+          
+          setAssignments(processedAssignments);
+        }
       } else {
         console.error('❌ API response not ok:', response.status, response.statusText);
         const errorText = await response.text();
@@ -118,12 +130,20 @@ export default function Home() {
     setShowCreateModal(true);
   };
 
-  // Handle take assignment (student)
+  // ⭐ UPDATED: Handle take assignment with security checks
   const handleTakeAssignment = (assignment: Assignment) => {
     if (!studentId.trim()) {
       alert('Please enter your Student ID first');
       return;
     }
+    
+    // ⭐ NEW: Verify assignment data is secure before opening
+    if (!verifyDataSecurity(assignment, 'student')) {
+      alert('Security Error: Cannot open assignment. Please contact administrator.');
+      return;
+    }
+    
+    console.log('✅ Assignment security verified - opening for student');
     setSelectedAssignment(assignment);
     setShowViewModal(false);
     setShowAssignmentViewer(true);
@@ -139,7 +159,7 @@ export default function Home() {
   };
 
   // Calculate total points for an assignment
-  const getTotalPoints = (questions: { [key: string]: AssignmentQuestion } | undefined | null): number => {
+  const getTotalPoints = (questions: { [key: string]: any } | undefined | null): number => {
     if (!questions || typeof questions !== 'object') {
       return 0;
     }
@@ -225,49 +245,28 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Create/Edit Assignment Modal */}
+      {/* Create Assignment Modal - Full Screen */}
       {showCreateModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black bg-opacity-50"
-          style={{ isolation: 'isolate' }}
-          onClick={() => setShowCreateModal(false)}
-        >
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className="relative flex items-center justify-center bg-blue-50 rounded-md shadow-lg p-6 w-full h-full z-20"
-              onClick={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              style={{
-                isolation: 'isolate',
-                touchAction: 'none',
-                pointerEvents: 'auto',
-                userSelect: 'none',
-              }}
-            >
-              <button
-                title="Close assignment creator"
-                className="absolute top-2 right-2 sm:top-5 sm:right-5 z-10 p-2.5
-                rounded-full bg-red-400 hover:bg-red-500
-                text-white shadow-lg
-                transform transition-all duration-200
-                hover:scale-110 hover:shadow-red-400/50
-                focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2
-                active:scale-95"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowCreateModal(false);
-                  setEditingAssignment(null);
-                }}
-              >
-                <X className="h-4 w-4" />
-              </button>
-
-              <AssignmentCreator editingAssignment={editingAssignment} />
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="absolute inset-0 flex items-start justify-center p-4 min-h-screen">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[95vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b bg-white sticky top-0 z-10">
+                <h2 className="text-xl font-bold text-gray-800">
+                  {editingAssignment ? 'Edit Assignment' : 'Create Assignment'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setEditingAssignment(null);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <AssignmentCreator editingAssignment={editingAssignment} />
+              </div>
             </div>
           </div>
         </div>
@@ -275,20 +274,11 @@ export default function Home() {
 
       {/* View Assignments Modal */}
       {showViewModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black bg-opacity-50"
-          onClick={() => setShowViewModal(false)}
-        >
-          <div
-            className="absolute inset-0 flex items-center justify-center p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-6 border-b">
-                <h2 className={`text-2xl font-bold ${
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+              <div className="flex items-center justify-between p-4 border-b">
+                <h2 className={`text-xl font-bold ${
                   userMode === 'teacher' ? 'text-teal-800' : 'text-blue-800'
                 }`}>
                   {userMode === 'teacher' ? 'Manage Assignments' : 'Available Assignments'}

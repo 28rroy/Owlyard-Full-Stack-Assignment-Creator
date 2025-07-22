@@ -1,9 +1,40 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, ScanCommand, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 // Initialize DynamoDB client
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
+
+// ⭐ NEW: Clean assignment data for students (remove correct answers)
+function cleanAssignmentForStudent(assignment) {
+    const cleanAssignment = { ...assignment };
+    
+    // Remove correct answers completely from the response
+    delete cleanAssignment.correctAnswers;
+    
+    // Double-check: Ensure questions don't have correct answers either
+    if (cleanAssignment.questions) {
+        const cleanQuestions = {};
+        Object.entries(cleanAssignment.questions).forEach(([key, question]) => {
+            cleanQuestions[key] = {
+                question: question.question,
+                options: question.options,
+                explanation: question.explanation,
+                points: question.points
+                // ⭐ correctOptions deliberately omitted
+            };
+        });
+        cleanAssignment.questions = cleanQuestions;
+    }
+    
+    return cleanAssignment;
+}
+
+// ⭐ NEW: Get complete assignment data for teachers/grading
+function getCompleteAssignmentForTeacher(assignment) {
+    // Teachers get everything including correct answers for grading
+    return assignment;
+}
 
 export const handler = async (event) => {
     // CORS headers
@@ -17,16 +48,7 @@ export const handler = async (event) => {
     try {
         console.log('Event received:', JSON.stringify(event, null, 2));
         
-        // Handle CORS preflight OPTIONS request
-        if (event.httpMethod === 'OPTIONS') {
-            return {
-                statusCode: 200,
-                headers: corsHeaders,
-                body: JSON.stringify({ message: 'CORS preflight successful' })
-            };
-        }
-        
-        // Only allow GET requests (OPTIONS handled above)
+        // Only allow GET requests (OPTIONS handled by API Gateway)
         if (event.httpMethod !== 'GET') {
             return {
                 statusCode: 405,
@@ -39,9 +61,13 @@ export const handler = async (event) => {
         const tableName = process.env.DYNAMODB_TABLE_NAME || 'AssignmentsTable';
         console.log('Using table:', tableName);
         
-        // UPDATED: Check query parameters for userId and specific assignmentId
+        // Parse query parameters
         const queryParams = event.queryStringParameters || {};
-        const { userId, assignmentId } = queryParams;
+        const { userId, assignmentId, requestingUserId, userRole } = queryParams;
+        
+        // ⭐ NEW: Determine if requester is teacher or student
+        const isTeacherRequest = userRole === 'teacher' || (requestingUserId && requestingUserId === userId);
+        console.log('Request type:', isTeacherRequest ? 'Teacher (complete data)' : 'Student (clean data)');
         
         if (userId && assignmentId) {
             // Get specific assignment for specific user
@@ -64,78 +90,44 @@ export const handler = async (event) => {
                 };
             }
             
+            // ⭐ NEW: Return appropriate data based on requester
+            const assignmentData = isTeacherRequest 
+                ? getCompleteAssignmentForTeacher(response.Item)
+                : cleanAssignmentForStudent(response.Item);
+            
+            console.log('Returning', isTeacherRequest ? 'complete' : 'student-safe', 'assignment data');
+            
             return {
                 statusCode: 200,
                 headers: corsHeaders,
                 body: JSON.stringify({
                     success: true,
-                    assignment: response.Item
+                    assignment: assignmentData,
+                    dataType: isTeacherRequest ? 'complete' : 'student-safe'
                 })
             };
         } 
         else if (userId) {
-            // Get all assignments for a specific user
+            // Get all assignments for a specific user (teacher's own assignments)
             console.log('Getting all assignments for user:', userId);
             const command = new QueryCommand({
                 TableName: tableName,
                 KeyConditionExpression: 'userId = :userId',
                 FilterExpression: '#type = :assignmentType',
-                ExpressionAttributeNames: {
-                    '#type': 'type'
-                },
                 ExpressionAttributeValues: {
                     ':userId': userId,
                     ':assignmentType': 'assignment'
-                }
-            });
-            
-            const response = await dynamodb.send(command);
-            const assignments = response.Items || [];
-            
-            // Sort by creation date (newest first)
-            assignments.sort((a, b) => {
-                const dateA = new Date(a.createdAt || '');
-                const dateB = new Date(b.createdAt || '');
-                return dateB.getTime() - dateA.getTime();
-            });
-            
-            console.log(`Found ${assignments.length} assignments for user ${userId}`);
-            
-            return {
-                statusCode: 200,
-                headers: corsHeaders,
-                body: JSON.stringify({
-                    success: true,
-                    assignments: assignments,
-                    count: assignments.length
-                })
-            };
-        }
-        else {
-            // Get all assignments across all users (for admin view)
-            console.log('Getting all assignments from table (admin view)');
-            const command = new ScanCommand({
-                TableName: tableName,
-                FilterExpression: '#type = :assignmentType',
+                },
                 ExpressionAttributeNames: {
                     '#type': 'type'
-                },
-                ExpressionAttributeValues: {
-                    ':assignmentType': 'assignment'
                 }
             });
             
             const response = await dynamodb.send(command);
+            
+            // Teachers always get complete data for their own assignments
             const assignments = response.Items || [];
-            
-            // Sort by creation date (newest first)
-            assignments.sort((a, b) => {
-                const dateA = new Date(a.createdAt || '');
-                const dateB = new Date(b.createdAt || '');
-                return dateB.getTime() - dateA.getTime();
-            });
-            
-            console.log(`Found ${assignments.length} assignments across all users`);
+            console.log(`Found ${assignments.length} assignments for teacher ${userId}`);
             
             return {
                 statusCode: 200,
@@ -144,8 +136,49 @@ export const handler = async (event) => {
                     success: true,
                     assignments: assignments,
                     count: assignments.length,
+                    dataType: 'complete',
                     debug: {
-                        message: 'Returned all assignments across all users',
+                        userId: userId,
+                        requestType: 'teacher-assignments',
+                        timestamp: new Date().toISOString()
+                    }
+                })
+            };
+        } 
+        else {
+            // Get all assignments (student view - for assignment selection)
+            console.log('Getting all assignments for student selection');
+            const command = new ScanCommand({
+                TableName: tableName,
+                FilterExpression: '#type = :assignmentType',
+                ExpressionAttributeValues: {
+                    ':assignmentType': 'assignment'
+                },
+                ExpressionAttributeNames: {
+                    '#type': 'type'
+                }
+            });
+            
+            const response = await dynamodb.send(command);
+            
+            // ⭐ NEW: Clean all assignments for student view
+            const assignments = (response.Items || []).map(assignment => 
+                cleanAssignmentForStudent(assignment)
+            );
+            
+            console.log(`Found ${assignments.length} assignments, cleaned for student view`);
+            
+            return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    success: true,
+                    assignments: assignments,
+                    count: assignments.length,
+                    dataType: 'student-safe',
+                    debug: {
+                        requestType: 'student-assignment-list',
+                        cleanedCorrectAnswers: true,
                         timestamp: new Date().toISOString()
                     }
                 })
@@ -153,21 +186,14 @@ export const handler = async (event) => {
         }
         
     } catch (error) {
-        // Enhanced error logging
-        console.error('💥 ERROR in get_assignments:', error);
-        console.error('💥 Error message:', error.message);
-        console.error('💥 Error stack:', error.stack);
-        console.error('💥 Event that caused error:', JSON.stringify(event));
+        console.error('Error getting assignments:', error);
         
-        // Return error response
         return {
             statusCode: 500,
             headers: corsHeaders,
             body: JSON.stringify({
-                success: false,
-                error: 'Internal server error',
+                error: 'Failed to retrieve assignments',
                 message: error.message,
-                details: error.stack,
                 timestamp: new Date().toISOString()
             })
         };
