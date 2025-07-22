@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { Users, Trophy, Clock, CheckCircle, X, FileText, BarChart3, Check, Pencil } from 'lucide-react';
 
-// Types
+// Types - Updated to handle both clean and complete assignment data
 interface AssignmentQuestion {
   question: string;
   options: string[];
-  correctOptions: number[];
+  correctOptions?: number[]; // Optional for clean data
   explanation: string;
   points: number;
 }
@@ -29,6 +29,17 @@ interface StudentResponse {
   assignmentId: string;
   assignmentOwnerId: string;
   userAssignmentResponse: number[];
+  score?: number; // ⭐ NEW: Auto-graded score from backend
+  totalPoints?: number; // ⭐ NEW: Auto-graded total points
+  percentage?: number; // ⭐ NEW: Auto-graded percentage
+  gradingDetails?: Array<{ // ⭐ NEW: Detailed grading from backend
+    questionKey: string;
+    questionPoints: number;
+    studentAnswer: number;
+    correctOptions: number[];
+    isCorrect: boolean;
+    pointsEarned: number;
+  }>;
   submittedAt: string;
   status: string;
   type: string;
@@ -47,14 +58,14 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
 
   // Debug log to check assignment data
   useEffect(() => {
-    console.log('Assignment data received:', assignment);
-    console.log('Assignment questions:', assignment?.questions);
+    console.log('🔍 StudentResultsViewer Assignment data received:', assignment);
+    console.log('🔍 Assignment questions:', assignment?.questions);
     fetchStudentResponses();
   }, [assignment.assignmentId]);
 
   const fetchStudentResponses = async () => {
     try {
-      console.log('Fetching responses for assignment:', assignment.assignmentId);
+      console.log('🔍 Fetching responses for assignment:', assignment.assignmentId);
       
       const response = await fetch(
         `/api/assignment-responses?action=get-all-responses&assignmentId=${assignment.assignmentId}`
@@ -62,21 +73,35 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Student responses received:', data.responses);
+        console.log('🔍 Student responses received:', data.responses);
         setStudentResponses(data.responses || []);
       } else {
-        console.error('Failed to fetch student responses:', response.status);
+        console.error('❌ Failed to fetch student responses:', response.status);
         setStudentResponses([]);
       }
     } catch (error) {
-      console.error('Error fetching student responses:', error);
+      console.error('❌ Error fetching student responses:', error);
       setStudentResponses([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // ⭐ UPDATED: Use backend grading data when available, fallback to frontend calculation
   const calculateStudentScore = (studentResponse: StudentResponse): { score: number; totalPoints: number; percentage: number } => {
+    // ⭐ NEW: If backend already calculated the score, use that
+    if (studentResponse.score !== undefined && studentResponse.totalPoints !== undefined && studentResponse.percentage !== undefined) {
+      console.log('✅ Using backend-calculated score for', studentResponse.userId);
+      return {
+        score: studentResponse.score,
+        totalPoints: studentResponse.totalPoints,
+        percentage: studentResponse.percentage
+      };
+    }
+
+    // ⭐ FALLBACK: Frontend calculation (for older responses or if backend grading failed)
+    console.log('⚠️ Using frontend fallback calculation for', studentResponse.userId);
+    
     if (!studentResponse.userAssignmentResponse || !assignment.questions) {
       return { score: 0, totalPoints: 0, percentage: 0 };
     }
@@ -90,16 +115,21 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
       const userAnswer = studentResponse.userAssignmentResponse[index];
       const correctAnswers = question.correctOptions;
       
-      // For single answer questions
-      if (correctAnswers.length === 1) {
-        if (userAnswer === correctAnswers[0]) {
-          score += question.points;
+      // ⭐ SAFETY CHECK: Only calculate if correctOptions exists
+      if (correctAnswers && Array.isArray(correctAnswers)) {
+        // For single answer questions
+        if (correctAnswers.length === 1) {
+          if (userAnswer === correctAnswers[0]) {
+            score += question.points;
+          }
+        } else {
+          // For multiple answer questions (basic scoring - could be enhanced)
+          if (correctAnswers.includes(userAnswer)) {
+            score += question.points;
+          }
         }
       } else {
-        // For multiple answer questions (basic scoring - could be enhanced)
-        if (correctAnswers.includes(userAnswer)) {
-          score += question.points;
-        }
+        console.warn('⚠️ No correct answers available for question', index, '- cannot calculate score');
       }
     });
 
@@ -300,58 +330,82 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                   </div>
                 </div>
 
-                {/* Detailed Response View - only show if detailed view is enabled and student is selected */}
+                {/* ⭐ UPDATED: Detailed Response View using backend grading data when available */}
                 {showDetailedView && isSelected && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <h4 className="font-medium text-teal-800 mb-3">Detailed Responses</h4>
                     <div className="space-y-4">
-                      {Object.entries(assignment.questions).map(([questionKey, question], qIndex) => {
-                        const userAnswer = response.userAssignmentResponse[qIndex];
-                        const isCorrect = question.correctOptions.includes(userAnswer);
-
-                        return (
-                          <div key={questionKey} className="bg-gray-50 rounded-md p-3 border">
+                      {/* ⭐ Use backend grading details if available */}
+                      {response.gradingDetails ? (
+                        response.gradingDetails.map((detail, qIndex) => (
+                          <div key={detail.questionKey} className="bg-gray-50 rounded-md p-3 border">
                             <div className="font-medium text-gray-800 mb-2">
-                              <span className="text-teal-700">Question {qIndex + 1}:</span> {question.question}
+                              <span className="text-teal-700">Question {qIndex + 1}:</span> 
+                              {assignment.questions[detail.questionKey]?.question || 'Question not found'}
                             </div>
                             <div className="space-y-2 text-sm">
                               <div className={`flex items-center gap-2 p-2 rounded ${
-                                isCorrect ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                detail.isCorrect ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                               }`}>
                                 <span className="font-medium">Student Answer:</span>
                                 <span>
-                                  {userAnswer !== undefined && userAnswer !== -1 
-                                    ? question.options[userAnswer] 
+                                  {detail.studentAnswer !== undefined && detail.studentAnswer !== -1 
+                                    ? assignment.questions[detail.questionKey]?.options[detail.studentAnswer] || `Option ${detail.studentAnswer + 1}`
                                     : 'No answer'}
                                 </span>
-                                {isCorrect ? (
-                                  <CheckCircle className="h-4 w-4 text-green-500" />
-                                ) : (
-                                  <X className="h-4 w-4 text-red-500" />
-                                )}
+                                <span className="ml-2">
+                                  {detail.isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                                </span>
                               </div>
-                              {!isCorrect && (
-                                <div className="bg-green-50 text-green-700 p-2 rounded">
-                                  <span className="font-medium">Correct Answer(s): </span>
-                                  <span>
-                                    {question.correctOptions.map(index => question.options[index]).join(', ')}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="text-gray-600 p-2">
-                                <span className="font-medium">Points Earned: </span>
-                                {isCorrect ? question.points : 0}/{question.points}
+                              <div className="text-gray-600">
+                                <span className="font-medium">Points:</span> {detail.pointsEarned}/{detail.questionPoints}
                               </div>
-                              {question.explanation && (
-                                <div className="bg-yellow-50 text-yellow-800 p-2 rounded border border-yellow-200">
-                                  <span className="font-medium">Explanation: </span>
-                                  {question.explanation}
+                              {assignment.questions[detail.questionKey]?.explanation && (
+                                <div className="bg-blue-50 p-2 rounded text-blue-700">
+                                  <span className="font-medium">Explanation:</span> {assignment.questions[detail.questionKey].explanation}
                                 </div>
                               )}
                             </div>
                           </div>
-                        );
-                      })}
+                        ))
+                      ) : (
+                        /* ⭐ FALLBACK: Use frontend calculation for older responses */
+                        Object.entries(assignment.questions).map(([questionKey, question], qIndex) => {
+                          const userAnswer = response.userAssignmentResponse[qIndex];
+                          const isCorrect = question.correctOptions ? question.correctOptions.includes(userAnswer) : false;
+
+                          return (
+                            <div key={questionKey} className="bg-gray-50 rounded-md p-3 border">
+                              <div className="font-medium text-gray-800 mb-2">
+                                <span className="text-teal-700">Question {qIndex + 1}:</span> {question.question}
+                              </div>
+                              <div className="space-y-2 text-sm">
+                                <div className={`flex items-center gap-2 p-2 rounded ${
+                                  isCorrect ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                                }`}>
+                                  <span className="font-medium">Student Answer:</span>
+                                  <span>
+                                    {userAnswer !== undefined && userAnswer !== -1 
+                                      ? question.options[userAnswer] || `Option ${userAnswer + 1}`
+                                      : 'No answer'}
+                                  </span>
+                                  <span className="ml-2">
+                                    {question.correctOptions ? (isCorrect ? '✓ Correct' : '✗ Incorrect') : '? Cannot determine'}
+                                  </span>
+                                </div>
+                                <div className="text-gray-600">
+                                  <span className="font-medium">Points:</span> {isCorrect ? question.points : 0}/{question.points}
+                                </div>
+                                {question.explanation && (
+                                  <div className="bg-blue-50 p-2 rounded text-blue-700">
+                                    <span className="font-medium">Explanation:</span> {question.explanation}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   </div>
                 )}
@@ -360,23 +414,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
           })}
         </div>
       )}
-
-      {/* Action Buttons - matching AssignmentCreator style */}
-      <div className="flex justify-between gap-4 mt-6">
-        <button
-          onClick={() => window.print()}
-          className="px-4 py-2 rounded transition bg-red-400 text-white hover:bg-red-500"
-        >
-          Print Results
-        </button>
-        <button
-          onClick={onCloseAction}
-          className="flex items-center gap-2 px-4 py-2 rounded transition bg-teal-600 text-white hover:bg-teal-700"
-        >
-          <X size={20}/>
-          Close
-        </button>
-      </div>
     </div>
   );
 };
