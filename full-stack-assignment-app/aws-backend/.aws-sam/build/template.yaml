@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Assignment Creator Backend - Updated with correct table structure
+Description: Assignment Creator Backend - Updated with correct table structure and
+  Grades functionality
 Parameters:
   S3BucketName:
     Type: String
@@ -156,6 +157,117 @@ Resources:
             Method: options
     Metadata:
       SamResourceId: AssignmentResponsesFunction
+  SaveGradesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Lambda function to save assignment grades
+      CodeUri: SaveGradesFunction
+      Handler: save_grades.handler
+      Role:
+        Fn::GetAtt:
+        - SaveGradesRole
+        - Arn
+      Environment:
+        Variables:
+          GRADES_TABLE: gradesTable
+          GSI_NAME: UserIdIndex
+      Events:
+        SaveGradesAPI:
+          Type: Api
+          Properties:
+            Path: /save-grades
+            Method: post
+        SaveGradesOptions:
+          Type: Api
+          Properties:
+            Path: /save-grades
+            Method: options
+    Metadata:
+      SamResourceId: SaveGradesFunction
+  ReadGradesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Lambda function to read assignment grades
+      CodeUri: ReadGradesFunction
+      Handler: read_grades.handler
+      Role:
+        Fn::GetAtt:
+        - ReadGradesRole
+        - Arn
+      Environment:
+        Variables:
+          GRADES_TABLE: gradesTable
+          GSI_NAME: UserIdIndex
+      Events:
+        ReadGradesAPI:
+          Type: Api
+          Properties:
+            Path: /read-grades
+            Method: get
+        ReadGradesOptions:
+          Type: Api
+          Properties:
+            Path: /read-grades
+            Method: options
+    Metadata:
+      SamResourceId: ReadGradesFunction
+  SaveGradesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: SaveGradesLambdaPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+          - Effect: Allow
+            Action:
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            Resource:
+            - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable
+  ReadGradesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: ReadGradesLambdaPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+          - Effect: Allow
+            Action:
+            - dynamodb:Query
+            - dynamodb:GetItem
+            Resource:
+            - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable
+            - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable/index/UserIdIndex
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
@@ -173,3 +285,17 @@ Outputs:
     Description: API Gateway endpoint URL for Assignment Responses function
     Value:
       Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/assignment-responses
+  GradesTableName:
+    Description: Name of the Grades DynamoDB table (created manually)
+    Value: gradesTable
+  GradesTableArn:
+    Description: ARN of the Grades DynamoDB table (manual)
+    Value: arn:aws:dynamodb:*:*:table/gradesTable
+  SaveGradesApi:
+    Description: API Gateway endpoint URL for Save Grades function
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/save-grades
+  ReadGradesApi:
+    Description: API Gateway endpoint URL for Read Grades function
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/read-grades

@@ -4,18 +4,22 @@ import { useState, useEffect } from 'react';
 import { AssignmentCreator } from '@/components/AssignmentCreator';
 import { AssignmentViewer } from '@/components/AssignmentViewer';
 import { StudentResultsViewer } from '@/components/StudentResultsViewer';
+import { AssignmentManager } from '@/components/AssignmentManager';
+import { GradesManager } from '@/components/GradesManager';
+import { StudentGradesDetail } from '@/components/StudentGradesDetail';
 import { useUser } from '@/contexts/UserContext';
-import { X, Pencil, Eye, Play, User, BarChart3, GraduationCap, Users } from 'lucide-react';
+import { X, Pencil, Eye, Play, User, BarChart3, GraduationCap, Users, Award } from 'lucide-react';
 
 // Import types for compatibility
 import { Assignment, CleanAssignment, cleanToComponentAssignment, verifyStudentDataSecurity } from '@/types';
 
-// ⭐ Keep original Assignment interface for component compatibility - remove the conflicting type definitions
-// Remove the interface definitions that were causing conflicts
-
 export default function Home() {
   const { userId, isTeacher, assignmentOwnerId } = useUser();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAssignmentManager, setShowAssignmentManager] = useState(false);
+  const [showGradesManager, setShowGradesManager] = useState(false);
+  const [showStudentGradesDetail, setShowStudentGradesDetail] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
   const [showViewModal, setShowViewModal] = useState(false);
   const [showAssignmentViewer, setShowAssignmentViewer] = useState(false);
   const [showStudentResults, setShowStudentResults] = useState(false);
@@ -28,12 +32,69 @@ export default function Home() {
 
   // Listen for global modal-close event
   useEffect(() => {
-    const handler = () => {
+    const handleCloseAssignmentModal = () => {
       setShowCreateModal(false);
       setEditingAssignment(null);
     };
-    window.addEventListener("close-assignment-modal", handler);
-    return () => window.removeEventListener("close-assignment-modal", handler);
+
+    const handleCloseAssignmentManager = () => {
+      setShowAssignmentManager(false);
+    };
+
+    const handleCloseGradesManager = () => {
+      setShowGradesManager(false);
+    };
+
+    const handleCloseStudentGradesDetail = () => {
+      setShowStudentGradesDetail(false);
+    };
+
+    const handleBackToGradesManager = () => {
+      setShowStudentGradesDetail(false);
+      setShowGradesManager(true);
+    };
+
+    const handleEditAssignment = (event: any) => {
+      const assignment = event.detail;
+      setEditingAssignment(assignment);
+      setShowAssignmentManager(false);
+      setShowCreateModal(true);
+    };
+
+    const handleViewStudentResults = (event: any) => {
+      const assignment = event.detail;
+      console.log('Opening results for assignment:', assignment);
+      setSelectedAssignment(assignment);
+      setShowAssignmentManager(false);
+      setShowStudentResults(true);
+    };
+
+    const handleViewStudentGrades = (event: any) => {
+      const { studentId } = event.detail;
+      setSelectedStudentId(studentId);
+      setShowGradesManager(false);
+      setShowStudentGradesDetail(true);
+    };
+
+    window.addEventListener("close-assignment-modal", handleCloseAssignmentModal);
+    window.addEventListener("close-assignment-manager", handleCloseAssignmentManager);
+    window.addEventListener("close-grades-manager", handleCloseGradesManager);
+    window.addEventListener("close-student-grades-detail", handleCloseStudentGradesDetail);
+    window.addEventListener("back-to-grades-manager", handleBackToGradesManager);
+    window.addEventListener("edit-assignment", handleEditAssignment);
+    window.addEventListener("view-student-results", handleViewStudentResults);
+    window.addEventListener("view-student-grades", handleViewStudentGrades);
+
+    return () => {
+      window.removeEventListener("close-assignment-modal", handleCloseAssignmentModal);
+      window.removeEventListener("close-assignment-manager", handleCloseAssignmentManager);
+      window.removeEventListener("close-grades-manager", handleCloseGradesManager);
+      window.removeEventListener("close-student-grades-detail", handleCloseStudentGradesDetail);
+      window.removeEventListener("back-to-grades-manager", handleBackToGradesManager);
+      window.removeEventListener("edit-assignment", handleEditAssignment);
+      window.removeEventListener("view-student-results", handleViewStudentResults);
+      window.removeEventListener("view-student-grades", handleViewStudentGrades);
+    };
   }, []);
 
   // ⭐ NEW: Security verification function
@@ -76,14 +137,7 @@ export default function Home() {
             processedAssignments = data.assignments.map((assignment: any) => 
               cleanToComponentAssignment(assignment as CleanAssignment)
             );
-          } else {
-          console.log('❌ NO ASSIGNMENTS RETURNED from API');
-        }
-        
-        // Check for debug info from backend
-        if (data.debug) {
-          console.log('🔍 Debug info from backend:', data.debug);
-        }
+          }
           
           processedAssignments.forEach((assignment: Assignment) => {
             console.log(`📄 Assignment ID: ${assignment.assignmentId}, Title: "${assignment.title}", Owner: ${assignment.assignmentOwnerId}`);
@@ -101,6 +155,14 @@ export default function Home() {
           });
           
           setAssignments(processedAssignments);
+        } else {
+          console.log('❌ NO ASSIGNMENTS RETURNED from API');
+          setAssignments([]);
+        }
+        
+        // Check for debug info from backend
+        if (data.debug) {
+          console.log('🔍 Debug info from backend:', data.debug);
         }
       } else {
         console.error('❌ API response not ok:', response.status, response.statusText);
@@ -126,7 +188,7 @@ export default function Home() {
   // Handle edit assignment (teacher only)
   const handleEditAssignment = (assignment: Assignment) => {
     setEditingAssignment(assignment);
-    setShowViewModal(false);
+    setShowAssignmentManager(false);
     setShowCreateModal(true);
   };
 
@@ -154,8 +216,15 @@ export default function Home() {
     console.log('Opening results for assignment:', assignment);
     console.log('Assignment questions:', assignment.questions);
     setSelectedAssignment(assignment);
-    setShowViewModal(false);
+    setShowAssignmentManager(false);
     setShowStudentResults(true);
+  };
+
+  // Handle view student grades detail
+  const handleViewStudentGrades = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    setShowGradesManager(false);
+    setShowStudentGradesDetail(true);
   };
 
   // Calculate total points for an assignment
@@ -222,27 +291,43 @@ export default function Home() {
       </div>
 
       {/* Main Buttons */}
-      <div className="flex gap-4 mb-4">
+      <div className="flex gap-4 mb-4 flex-wrap justify-center">
         {userMode === 'teacher' && (
-          <button
-            className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition"
-            onClick={() => setShowCreateModal(true)}
-          >
-            + Create Assignment
-          </button>
+          <>
+            <button
+              className="bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700 transition"
+              onClick={() => setShowCreateModal(true)}
+            >
+              + Create Assignment
+            </button>
+            
+            <button
+              className="bg-orange-400 text-white px-4 py-2 rounded-md hover:bg-orange-500 transition flex items-center gap-2"
+              onClick={() => setShowAssignmentManager(true)}
+            >
+              <Eye className="h-4 w-4" />
+              Manage Assignments
+            </button>
+            
+            <button
+              className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition flex items-center gap-2"
+              onClick={() => setShowGradesManager(true)}
+            >
+              <Award className="h-4 w-4" />
+              All Grades
+            </button>
+          </>
         )}
         
-        <button
-          className={`text-white px-4 py-2 rounded-md transition flex items-center gap-2 ${
-            userMode === 'teacher'
-              ? 'bg-orange-400 hover:bg-orange-500'
-              : 'bg-blue-600 hover:bg-blue-700'
-          }`}
-          onClick={handleViewAssignments}
-        >
-          <Eye className="h-4 w-4" />
-          {userMode === 'teacher' ? 'Manage Assignments' : 'Available Assignments'}
-        </button>
+        {userMode === 'student' && (
+          <button
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition flex items-center gap-2"
+            onClick={handleViewAssignments}
+          >
+            <Eye className="h-4 w-4" />
+            Available Assignments
+          </button>
+        )}
       </div>
 
       {/* Create Assignment Modal - Full Screen */}
@@ -272,16 +357,53 @@ export default function Home() {
         </div>
       )}
 
-      {/* View Assignments Modal */}
+      {/* Assignment Manager Modal */}
+      {showAssignmentManager && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+              <AssignmentManager
+                userId={userId}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grades Manager Modal */}
+      {showGradesManager && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+              <GradesManager
+                teacherId={userId}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Student Grades Detail Modal */}
+      {showStudentGradesDetail && (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+              <StudentGradesDetail
+                studentId={selectedStudentId}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Assignments Modal (Student Mode) */}
       {showViewModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
               <div className="flex items-center justify-between p-4 border-b">
-                <h2 className={`text-xl font-bold ${
-                  userMode === 'teacher' ? 'text-teal-800' : 'text-blue-800'
-                }`}>
-                  {userMode === 'teacher' ? 'Manage Assignments' : 'Available Assignments'}
+                <h2 className="text-xl font-bold text-blue-800">
+                  Available Assignments
                 </h2>
                 <button
                   onClick={() => setShowViewModal(false)}
@@ -294,23 +416,12 @@ export default function Home() {
               <div className="p-6 overflow-y-auto max-h-[60vh]">
                 {loading ? (
                   <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                     <p className="mt-4 text-gray-600">Loading assignments...</p>
                   </div>
                 ) : assignments.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-gray-600">No assignments found.</p>
-                    {userMode === 'teacher' && (
-                      <button
-                        onClick={() => {
-                          setShowViewModal(false);
-                          setShowCreateModal(true);
-                        }}
-                        className="mt-4 bg-teal-600 text-white px-4 py-2 rounded-md hover:bg-teal-700"
-                      >
-                        Create Your First Assignment
-                      </button>
-                    )}
+                    <p className="text-gray-600">No assignments available.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -337,37 +448,14 @@ export default function Home() {
                           </div>
 
                           <div className="flex items-center gap-2 ml-4">
-                            {userMode === 'teacher' && (
-                              <>
-                                <button
-                                  onClick={() => handleEditAssignment(assignment)}
-                                  className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                                  title="Edit Assignment"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleViewStudentResults(assignment)}
-                                  className="flex items-center gap-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                                  title="View Student Results"
-                                >
-                                  <BarChart3 className="h-4 w-4" />
-                                  Results
-                                </button>
-                              </>
-                            )}
-                            
-                            {userMode === 'student' && (
-                              <button
-                                onClick={() => handleTakeAssignment(assignment)}
-                                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                                title="Take Assignment"
-                              >
-                                <Play className="h-4 w-4" />
-                                Take
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleTakeAssignment(assignment)}
+                              className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                              title="Take Assignment"
+                            >
+                              <Play className="h-4 w-4" />
+                              Take
+                            </button>
                           </div>
                         </div>
                       </div>

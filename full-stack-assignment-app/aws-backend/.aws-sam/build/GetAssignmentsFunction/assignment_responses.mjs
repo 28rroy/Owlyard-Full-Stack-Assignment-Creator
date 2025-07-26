@@ -6,14 +6,14 @@ import { randomUUID } from "crypto";
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
 
-// ⭐ NEW: Grade student response using secure correct answers
-async function gradeStudentResponse(studentResponses, assignmentId, assignmentOwnerId, tableName) {
+// Grade student response using secure correct answers
+async function gradeStudentResponse(studentResponses, assignmentId, assignmentOwnerId, assignmentsTableName) {
     try {
         console.log('Grading response for assignment:', assignmentId, 'owner:', assignmentOwnerId);
         
         // Get the complete assignment with correct answers for grading
         const assignmentCommand = new GetCommand({
-            TableName: tableName,
+            TableName: assignmentsTableName,
             Key: { 
                 userId: assignmentOwnerId,  // Assignment owner has the correct answers
                 assignmentId: assignmentId 
@@ -33,7 +33,7 @@ async function gradeStudentResponse(studentResponses, assignmentId, assignmentOw
         }
         
         const assignment = assignmentResponse.Item;
-        const correctAnswers = assignment.correctAnswers;  // ⭐ Secure correct answers
+        const correctAnswers = assignment.correctAnswers;  // Secure correct answers
         const questions = assignment.questions;
         
         let score = 0;
@@ -71,7 +71,7 @@ async function gradeStudentResponse(studentResponses, assignmentId, assignmentOw
         
         const percentage = totalPoints > 0 ? Math.round((score / totalPoints) * 100) : 0;
         
-        console.log(`Grading complete: ${score}/${totalPoints} points (${percentage}%)`);
+        console.log(`Final grading result: ${score}/${totalPoints} points (${percentage}%)`);
         
         return {
             score,
@@ -81,88 +81,78 @@ async function gradeStudentResponse(studentResponses, assignmentId, assignmentOw
         };
         
     } catch (error) {
-        console.error('Error grading student response:', error);
+        console.error('Error during grading:', error);
         return { score: 0, totalPoints: 0, details: [], error: error.message };
     }
 }
 
-// Submit assignment response with automatic grading
-async function submitResponse(event, tableName, corsHeaders) {
+// Submit assignment response - Save directly to grades table
+async function submitResponse(event, assignmentsTableName, gradesTableName, corsHeaders) {
     try {
-        let body;
-        try {
-            body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
-        } catch (parseError) {
-            return {
-                statusCode: 400,
-                headers: corsHeaders,
-                body: JSON.stringify({ error: 'Invalid JSON in request body' })
-            };
-        }
+        const body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
         
         const { userId, assignmentId, assignmentOwnerId, userAssignmentResponse } = body;
         
-        // Validate required fields
         if (!userId || !assignmentId || !assignmentOwnerId || !userAssignmentResponse) {
             return {
                 statusCode: 400,
                 headers: corsHeaders,
-                body: JSON.stringify({ 
-                    error: 'Missing required fields: userId, assignmentId, assignmentOwnerId, userAssignmentResponse' 
-                })
+                body: JSON.stringify({ error: 'Missing required fields' })
             };
         }
         
-        if (!Array.isArray(userAssignmentResponse)) {
-            return {
-                statusCode: 400,
-                headers: corsHeaders,
-                body: JSON.stringify({ error: 'userAssignmentResponse must be an array' })
-            };
-        }
+        console.log('Processing assignment submission:', {
+            userId,
+            assignmentId,
+            assignmentOwnerId,
+            responseLength: userAssignmentResponse.length
+        });
         
-        console.log('Submitting response from user:', userId, 'for assignment:', assignmentId);
-        
-        // ⭐ NEW: Grade the response securely using correct answers
+        // Grade the response automatically using secure backend data
         const gradingResult = await gradeStudentResponse(
             userAssignmentResponse, 
             assignmentId, 
             assignmentOwnerId, 
-            tableName
+            assignmentsTableName
         );
         
         if (gradingResult.error) {
+            console.error('Grading failed:', gradingResult.error);
             return {
-                statusCode: 400,
+                statusCode: 500,
                 headers: corsHeaders,
-                body: JSON.stringify({ error: `Grading failed: ${gradingResult.error}` })
+                body: JSON.stringify({ 
+                    error: 'Failed to grade assignment',
+                    message: gradingResult.error 
+                })
             };
         }
-        
-        // Create response record with grading results
-        const responseItem = {
-            userId: userId,                          // Student who submitted
-            assignmentId: assignmentId,              // Assignment ID (sort key for responses)
-            assignmentOwnerId: assignmentOwnerId,    // Teacher who created the assignment
-            userAssignmentResponse: userAssignmentResponse, // Student's answers
-            score: gradingResult.score,              // ⭐ NEW: Calculated score
-            totalPoints: gradingResult.totalPoints,  // ⭐ NEW: Total possible points
-            percentage: gradingResult.percentage,    // ⭐ NEW: Percentage score
-            gradingDetails: gradingResult.details,   // ⭐ NEW: Detailed grading results
+      
+        // Create grade record for grades table
+        const gradeItem = {
+            assignmentId: assignmentId,                  // Partition key for grades table
+            userId: userId,                              // Sort key for grades table  
+            score: gradingResult.score,
+            totalPoints: gradingResult.totalPoints,
+            percentage: gradingResult.percentage,
+            gradingDetails: gradingResult.details,
+            userAssignmentResponse: userAssignmentResponse, // Store student's answers
+            assignmentOwnerId: assignmentOwnerId,        // For permissions/filtering
             submittedAt: new Date().toISOString(),
-            status: 'submitted',
-            type: 'response'
+            gradedAt: new Date().toISOString(),
+            status: 'graded',
+            type: 'grade'
         };
         
-        // Save the graded response
+        // Save directly to grades table
         const putCommand = new PutCommand({
-            TableName: tableName,
-            Item: responseItem
+            TableName: gradesTableName,
+            Item: gradeItem
         });
         
         await dynamodb.send(putCommand);
         
-        console.log('Assignment response submitted and graded successfully');
+        console.log('✅ Grade saved directly to grades table');
         console.log('Final score:', gradingResult.score, '/', gradingResult.totalPoints, `(${gradingResult.percentage}%)`);
         
         return {
@@ -174,7 +164,7 @@ async function submitResponse(event, tableName, corsHeaders) {
                 score: gradingResult.score,
                 totalPoints: gradingResult.totalPoints,
                 percentage: gradingResult.percentage,
-                submittedAt: responseItem.submittedAt,
+                submittedAt: gradeItem.submittedAt,
                 gradingSummary: `${gradingResult.score}/${gradingResult.totalPoints} points`
             })
         };
@@ -192,8 +182,8 @@ async function submitResponse(event, tableName, corsHeaders) {
     }
 }
 
-// Get assignment response or check permissions
-async function getResponse(event, tableName, corsHeaders) {
+// Get assignment response or check permissions - Read from grades table
+async function getResponse(event, assignmentsTableName, gradesTableName, corsHeaders) {
     try {
         const queryParams = event.queryStringParameters || {};
         const { userId, assignmentId, action, assignmentOwnerId } = queryParams;
@@ -215,48 +205,58 @@ async function getResponse(event, tableName, corsHeaders) {
         }
         
         if (userId && assignmentId) {
-            // Get specific response
+            // Get specific response from grades table
             const command = new GetCommand({
-                TableName: tableName,
+                TableName: gradesTableName,
                 Key: {
-                    userId: userId,
-                    assignmentId: assignmentId
+                    assignmentId: assignmentId,
+                    userId: userId
                 }
             });
             
             const response = await dynamodb.send(command);
             
-            if (response.Item && response.Item.type === 'response') {
-                return {
-                    statusCode: 200,
-                    headers: corsHeaders,
-                    body: JSON.stringify({
-                        success: true,
-                        response: response.Item
-                    })
-                };
-            } else {
+            if (!response.Item || response.Item.type !== 'grade') {
                 return {
                     statusCode: 404,
                     headers: corsHeaders,
-                    body: JSON.stringify({
-                        success: false,
-                        message: 'No response found'
-                    })
+                    body: JSON.stringify({ error: 'Response not found' })
                 };
             }
-        }
-        
-        if (assignmentId) {
-            // Get all responses for an assignment (for teachers)
+            
+            // Convert grades table format to expected response format
+            const responseItem = {
+                userId: response.Item.userId,
+                assignmentId: response.Item.assignmentId,
+                assignmentOwnerId: response.Item.assignmentOwnerId,
+                userAssignmentResponse: response.Item.userAssignmentResponse,
+                score: response.Item.score,
+                totalPoints: response.Item.totalPoints,
+                percentage: response.Item.percentage,
+                gradingDetails: response.Item.gradingDetails,
+                submittedAt: response.Item.submittedAt,
+                status: 'submitted',
+                type: 'response'
+            };
+            
+            return {
+                statusCode: 200,
+                headers: corsHeaders,
+                body: JSON.stringify({
+                    success: true,
+                    response: responseItem
+                })
+            };
+        } 
+        else if (assignmentId) {
+            // Get all responses for an assignment from grades table
             const command = new QueryCommand({
-                TableName: tableName,
-                IndexName: 'AssignmentIdIndex',
+                TableName: gradesTableName,
                 KeyConditionExpression: 'assignmentId = :assignmentId',
-                FilterExpression: '#type = :responseType',
+                FilterExpression: '#type = :gradeType',
                 ExpressionAttributeValues: {
                     ':assignmentId': assignmentId,
-                    ':responseType': 'response'
+                    ':gradeType': 'grade'
                 },
                 ExpressionAttributeNames: {
                     '#type': 'type'
@@ -265,22 +265,38 @@ async function getResponse(event, tableName, corsHeaders) {
             
             const response = await dynamodb.send(command);
             
+            // Convert grades to response format
+            const responses = (response.Items || []).map(item => ({
+                userId: item.userId,
+                assignmentId: item.assignmentId,
+                assignmentOwnerId: item.assignmentOwnerId,
+                userAssignmentResponse: item.userAssignmentResponse,
+                score: item.score,
+                totalPoints: item.totalPoints,
+                percentage: item.percentage,
+                gradingDetails: item.gradingDetails,
+                submittedAt: item.submittedAt,
+                status: 'submitted',
+                type: 'response'
+            }));
+            
             return {
                 statusCode: 200,
                 headers: corsHeaders,
                 body: JSON.stringify({
                     success: true,
-                    responses: response.Items || [],
-                    count: response.Items ? response.Items.length : 0
+                    responses: responses,
+                    count: responses.length
                 })
             };
         }
-        
-        return {
-            statusCode: 400,
-            headers: corsHeaders,
-            body: JSON.stringify({ error: 'Missing required parameters' })
-        };
+        else {
+            return {
+                statusCode: 400,
+                headers: corsHeaders,
+                body: JSON.stringify({ error: 'Missing required parameters' })
+            };
+        }
         
     } catch (error) {
         console.error('Error getting response:', error);
@@ -296,7 +312,6 @@ async function getResponse(event, tableName, corsHeaders) {
 }
 
 export const handler = async (event) => {
-    // CORS headers
     const corsHeaders = {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -307,7 +322,6 @@ export const handler = async (event) => {
     try {
         console.log('Event received:', JSON.stringify(event, null, 2));
         
-        // Handle CORS preflight OPTIONS request
         if (event.httpMethod === 'OPTIONS') {
             return {
                 statusCode: 200,
@@ -316,14 +330,15 @@ export const handler = async (event) => {
             };
         }
         
-        const tableName = process.env.DYNAMODB_TABLE_NAME || 'AssignmentsTable';
+        const assignmentsTableName = process.env.DYNAMODB_TABLE_NAME || 'AssignmentsTable';
+        const gradesTableName = process.env.GRADES_TABLE_NAME || 'gradesTable';
+        
+        console.log('Using tables:', { assignmentsTableName, gradesTableName });
         
         if (event.httpMethod === 'POST') {
-            // Submit assignment response
-            return await submitResponse(event, tableName, corsHeaders);
+            return await submitResponse(event, assignmentsTableName, gradesTableName, corsHeaders);
         } else if (event.httpMethod === 'GET') {
-            // Get assignment response or check permissions
-            return await getResponse(event, tableName, corsHeaders);
+            return await getResponse(event, assignmentsTableName, gradesTableName, corsHeaders);
         } else {
             return {
                 statusCode: 405,
