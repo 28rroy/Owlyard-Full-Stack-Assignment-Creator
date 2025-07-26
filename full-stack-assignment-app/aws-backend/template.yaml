@@ -50,22 +50,102 @@ Resources:
   # Sort key: userId (String)
   # GSI: UserIdIndex (userId as partition key, assignmentId as sort key)
 
+  # REUSABLE DynamoDB CRUD Policy
+  DynamoDBCRUDPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${AWS::StackName}-DynamoDB-CRUD-Policy"
+      Description: "Comprehensive DynamoDB CRUD operations policy for all tables"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              # Read Operations
+              - dynamodb:GetItem
+              - dynamodb:Query
+              - dynamodb:Scan
+              - dynamodb:BatchGetItem
+              # Write Operations
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:BatchWriteItem
+              # Conditional Operations
+              - dynamodb:ConditionCheckItem
+              # Stream Operations (if needed)
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:ListStreams
+            Resource:
+              - !GetAtt AssignmentsTable.Arn
+              - !Sub "${AssignmentsTable.Arn}/index/*"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable"
+              - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable/index/*"
+
+  # Lambda Basic Execution Policy (for CloudWatch Logs)
+  LambdaBasicExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${AWS::StackName}-Lambda-Basic-Execution-Policy"
+      Description: "Basic execution policy for Lambda functions (CloudWatch Logs)"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: 
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
+
+  # S3 Access Policy
+  S3AccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${AWS::StackName}-S3-Access-Policy"
+      Description: "S3 access policy for assignment files"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:DeleteObject
+            Resource: !Sub "arn:aws:s3:::${S3BucketName}/*"
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource: !Sub "arn:aws:s3:::${S3BucketName}"
+
+  # SIMPLIFIED: Common Lambda Execution Role
+  CommonLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-Common-Lambda-Execution-Role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref DynamoDBCRUDPolicy
+        - !Ref LambdaBasicExecutionPolicy
+        - !Ref S3AccessPolicy
+
   # Lambda function to save assignments (POST)
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: assignment_functions/
       Handler: save_assignment.handler
-      Policies:
-        - DynamoDBWritePolicy:
-            TableName: !Ref AssignmentsTable
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - s3:PutObject
-                - s3:PutObjectAcl
-              Resource: !Sub "arn:aws:s3:::${S3BucketName}/assignment/*"
+      Role: !GetAtt CommonLambdaExecutionRole.Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: !Ref AssignmentsTable
@@ -88,18 +168,7 @@ Resources:
     Properties:
       CodeUri: assignment_functions/
       Handler: get_assignments.handler
-      Policies:
-        - DynamoDBReadPolicy:
-            TableName: !Ref AssignmentsTable
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:Query
-                - dynamodb:Scan
-              Resource: 
-                - !GetAtt AssignmentsTable.Arn
-                - !Sub "${AssignmentsTable.Arn}/index/*"
+      Role: !GetAtt CommonLambdaExecutionRole.Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: !Ref AssignmentsTable
@@ -121,20 +190,7 @@ Resources:
     Properties:
       CodeUri: assignment_functions/
       Handler: assignment_responses.handler
-      Policies:
-        - DynamoDBWritePolicy:
-            TableName: !Ref AssignmentsTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref AssignmentsTable
-        - Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - dynamodb:Query
-                - dynamodb:Scan
-              Resource: 
-                - !GetAtt AssignmentsTable.Arn
-                - !Sub "${AssignmentsTable.Arn}/index/*"
+      Role: !GetAtt CommonLambdaExecutionRole.Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: !Ref AssignmentsTable
@@ -162,7 +218,7 @@ Resources:
       Description: "Lambda function to save assignment grades"
       CodeUri: assignment_functions/
       Handler: save_grades.handler
-      Role: !GetAtt SaveGradesRole.Arn
+      Role: !GetAtt CommonLambdaExecutionRole.Arn
       Environment:
         Variables:
           GRADES_TABLE: gradesTable
@@ -186,7 +242,7 @@ Resources:
       Description: "Lambda function to read assignment grades"
       CodeUri: assignment_functions/
       Handler: read_grades.handler
-      Role: !GetAtt ReadGradesRole.Arn
+      Role: !GetAtt CommonLambdaExecutionRole.Arn
       Environment:
         Variables:
           GRADES_TABLE: gradesTable
@@ -202,67 +258,6 @@ Resources:
           Properties:
             Path: /read-grades
             Method: options
-
-  # NEW: IAM Role for Save Grades Lambda
-  SaveGradesRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: SaveGradesLambdaPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: 
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
-              - Effect: Allow
-                Action:
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                Resource: 
-                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable"
-
-  # NEW: IAM Role for Read Grades Lambda
-  ReadGradesRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: ReadGradesLambdaPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: 
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
-              - Effect: Allow
-                Action:
-                  - dynamodb:Query
-                  - dynamodb:GetItem
-                Resource: 
-                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable"
-                  - !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable/index/UserIdIndex"
 
 Outputs:
   ApiUrl:
@@ -297,3 +292,16 @@ Outputs:
   ReadGradesApi:
     Description: "API Gateway endpoint URL for Read Grades function"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/read-grades"
+
+  # IAM Policy Outputs
+  DynamoDBCRUDPolicyArn:
+    Description: "ARN of the reusable DynamoDB CRUD Policy"
+    Value: !Ref DynamoDBCRUDPolicy
+    Export:
+      Name: !Sub "${AWS::StackName}-DynamoDB-CRUD-Policy-Arn"
+  
+  CommonLambdaExecutionRoleArn:
+    Description: "ARN of the common Lambda execution role"
+    Value: !GetAtt CommonLambdaExecutionRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-Common-Lambda-Role-Arn"

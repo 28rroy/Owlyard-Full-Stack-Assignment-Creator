@@ -39,23 +39,100 @@ Resources:
           KeyType: HASH
         Projection:
           ProjectionType: ALL
+  DynamoDBCRUDPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: ${AWS::StackName}-DynamoDB-CRUD-Policy
+      Description: Comprehensive DynamoDB CRUD operations policy for all tables
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - dynamodb:GetItem
+          - dynamodb:Query
+          - dynamodb:Scan
+          - dynamodb:BatchGetItem
+          - dynamodb:PutItem
+          - dynamodb:UpdateItem
+          - dynamodb:DeleteItem
+          - dynamodb:BatchWriteItem
+          - dynamodb:ConditionCheckItem
+          - dynamodb:DescribeStream
+          - dynamodb:GetRecords
+          - dynamodb:GetShardIterator
+          - dynamodb:ListStreams
+          Resource:
+          - Fn::GetAtt:
+            - AssignmentsTable
+            - Arn
+          - Fn::Sub: ${AssignmentsTable.Arn}/index/*
+          - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable
+          - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable/index/*
+  LambdaBasicExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: ${AWS::StackName}-Lambda-Basic-Execution-Policy
+      Description: Basic execution policy for Lambda functions (CloudWatch Logs)
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          Resource:
+          - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
+  S3AccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName:
+        Fn::Sub: ${AWS::StackName}-S3-Access-Policy
+      Description: S3 access policy for assignment files
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          - s3:PutObject
+          - s3:PutObjectAcl
+          - s3:DeleteObject
+          Resource:
+            Fn::Sub: arn:aws:s3:::${S3BucketName}/*
+        - Effect: Allow
+          Action:
+          - s3:ListBucket
+          Resource:
+            Fn::Sub: arn:aws:s3:::${S3BucketName}
+  CommonLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: ${AWS::StackName}-Common-Lambda-Execution-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - Ref: DynamoDBCRUDPolicy
+      - Ref: LambdaBasicExecutionPolicy
+      - Ref: S3AccessPolicy
   SaveAssignmentFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: SaveAssignmentFunction
       Handler: save_assignment.handler
-      Policies:
-      - DynamoDBWritePolicy:
-          TableName:
-            Ref: AssignmentsTable
-      - Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action:
-          - s3:PutObject
-          - s3:PutObjectAcl
-          Resource:
-            Fn::Sub: arn:aws:s3:::${S3BucketName}/assignment/*
+      Role:
+        Fn::GetAtt:
+        - CommonLambdaExecutionRole
+        - Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME:
@@ -80,21 +157,10 @@ Resources:
     Properties:
       CodeUri: GetAssignmentsFunction
       Handler: get_assignments.handler
-      Policies:
-      - DynamoDBReadPolicy:
-          TableName:
-            Ref: AssignmentsTable
-      - Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action:
-          - dynamodb:Query
-          - dynamodb:Scan
-          Resource:
-          - Fn::GetAtt:
-            - AssignmentsTable
-            - Arn
-          - Fn::Sub: ${AssignmentsTable.Arn}/index/*
+      Role:
+        Fn::GetAtt:
+        - CommonLambdaExecutionRole
+        - Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME:
@@ -117,24 +183,10 @@ Resources:
     Properties:
       CodeUri: AssignmentResponsesFunction
       Handler: assignment_responses.handler
-      Policies:
-      - DynamoDBWritePolicy:
-          TableName:
-            Ref: AssignmentsTable
-      - DynamoDBReadPolicy:
-          TableName:
-            Ref: AssignmentsTable
-      - Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Action:
-          - dynamodb:Query
-          - dynamodb:Scan
-          Resource:
-          - Fn::GetAtt:
-            - AssignmentsTable
-            - Arn
-          - Fn::Sub: ${AssignmentsTable.Arn}/index/*
+      Role:
+        Fn::GetAtt:
+        - CommonLambdaExecutionRole
+        - Arn
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME:
@@ -165,7 +217,7 @@ Resources:
       Handler: save_grades.handler
       Role:
         Fn::GetAtt:
-        - SaveGradesRole
+        - CommonLambdaExecutionRole
         - Arn
       Environment:
         Variables:
@@ -192,7 +244,7 @@ Resources:
       Handler: read_grades.handler
       Role:
         Fn::GetAtt:
-        - ReadGradesRole
+        - CommonLambdaExecutionRole
         - Arn
       Environment:
         Variables:
@@ -211,63 +263,6 @@ Resources:
             Method: options
     Metadata:
       SamResourceId: ReadGradesFunction
-  SaveGradesRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: lambda.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: SaveGradesLambdaPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource:
-            - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
-          - Effect: Allow
-            Action:
-            - dynamodb:PutItem
-            - dynamodb:UpdateItem
-            Resource:
-            - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable
-  ReadGradesRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service: lambda.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: ReadGradesLambdaPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource:
-            - Fn::Sub: arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*
-          - Effect: Allow
-            Action:
-            - dynamodb:Query
-            - dynamodb:GetItem
-            Resource:
-            - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable
-            - Fn::Sub: arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/gradesTable/index/UserIdIndex
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
@@ -299,3 +294,19 @@ Outputs:
     Description: API Gateway endpoint URL for Read Grades function
     Value:
       Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/read-grades
+  DynamoDBCRUDPolicyArn:
+    Description: ARN of the reusable DynamoDB CRUD Policy
+    Value:
+      Ref: DynamoDBCRUDPolicy
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-DynamoDB-CRUD-Policy-Arn
+  CommonLambdaExecutionRoleArn:
+    Description: ARN of the common Lambda execution role
+    Value:
+      Fn::GetAtt:
+      - CommonLambdaExecutionRole
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-Common-Lambda-Role-Arn

@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const GRADES_API_BASE = process.env.GRADES_API_BASE || 'https://your-api-gateway-url.amazonaws.com/Prod';
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     
+    // Use the same environment variable as other API routes
+    const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
+    
+    // Check if environment variable is properly set
+    if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL' || apiGatewayUrl.includes('your-api-id')) {
+      return NextResponse.json(
+        { 
+          error: 'API Gateway URL not configured properly',
+          details: `Current value: ${apiGatewayUrl}`,
+          fix: 'Please check your .env.local file'
+        },
+        { status: 500 }
+      );
+    }
+    
     // Forward all query parameters to the backend
     const queryString = searchParams.toString();
-    const backendUrl = `${GRADES_API_BASE}/read-grades${queryString ? `?${queryString}` : ''}`;
+    const backendUrl = `${apiGatewayUrl}/read-grades${queryString ? `?${queryString}` : ''}`;
     
     console.log('🔍 Forwarding grades request to:', backendUrl);
     
@@ -47,7 +60,23 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const backendUrl = `${GRADES_API_BASE}/save-grades`;
+    
+    // Use the same environment variable as other API routes
+    const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
+    
+    // Check if environment variable is properly set
+    if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL' || apiGatewayUrl.includes('your-api-id')) {
+      return NextResponse.json(
+        { 
+          error: 'API Gateway URL not configured properly',
+          details: `Current value: ${apiGatewayUrl}`,
+          fix: 'Please check your .env.local file'
+        },
+        { status: 500 }
+      );
+    }
+    
+    const backendUrl = `${apiGatewayUrl}/save-grades`;
     
     console.log('🔍 Forwarding save grades request to:', backendUrl);
     
