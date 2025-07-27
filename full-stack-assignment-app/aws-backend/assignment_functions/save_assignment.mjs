@@ -1,217 +1,184 @@
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
-import { randomUUID } from "crypto";
+// aws-backend/assignment_functions/save_assignment.mjs
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
+import { v4 as uuidv4 } from 'uuid';
 
-// Initialize AWS clients
-const dynamoClient = new DynamoDBClient({});
-const dynamodb = DynamoDBDocumentClient.from(dynamoClient);
-const s3Client = new S3Client({});
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
-// Validation constants
-const MAX_QUESTION_LENGTH = 1000;
-const MAX_OPTION_LENGTH = 500;
-const MAX_QUESTIONS = 100;
-
-// ⭐ NEW: Function to separate student data from correct answers
-function processQuestionsForStorage(questions) {
-    const studentFacingQuestions = {};
-    const correctAnswersVector = {};
-    
-    Object.entries(questions).forEach(([key, question]) => {
-        // Student-facing data (NO correct answers)
-        studentFacingQuestions[key] = {
-            question: question.question,
-            options: question.options,
-            explanation: question.explanation,
-            points: question.points
-            // ⭐ correctOptions deliberately omitted
-        };
-        
-        // Secure correct answers storage
-        correctAnswersVector[key] = {
-            correctOptions: question.correctOptions
-        };
-    });
-    
-    return { studentFacingQuestions, correctAnswersVector };
-}
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+    'Access-Control-Allow-Methods': 'POST,OPTIONS'
+};
 
 export const handler = async (event) => {
-    // CORS headers (for error responses)
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Amz-Date, X-Api-Key, X-Amz-Security-Token',
-        'Content-Type': 'application/json'
-    };
+    console.log('Event received:', JSON.stringify(event, null, 2));
     
+    if (event.httpMethod === 'OPTIONS') {
+        return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({ message: 'CORS preflight' })
+        };
+    }
+
     try {
-        console.log('Event received:', JSON.stringify(event, null, 2));
+        const tableName = process.env.DYNAMODB_TABLE_NAME;
         
-        // Only allow POST requests (OPTIONS handled by API Gateway)
-        if (event.httpMethod !== 'POST') {
-            return {
-                statusCode: 405,
-                headers: corsHeaders,
-                body: JSON.stringify({ error: 'Method not allowed. Use POST.' })
-            };
+        if (!tableName) {
+            throw new Error('DYNAMODB_TABLE_NAME environment variable not set');
         }
+
+        const body = JSON.parse(event.body);
+        console.log('Parsed body:', body);
         
-        // Parse request body
-        let body;
-        try {
-            body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
-        } catch (parseError) {
-            console.error('Failed to parse request body:', parseError);
-            return {
-                statusCode: 400,
-                headers: corsHeaders,
-                body: JSON.stringify({ error: 'Invalid JSON in request body' })
-            };
-        }
-        
-        // Extract and validate required fields
-        const { title: assignmentTitle, questions, userId, assignmentOwnerId, createdAt, metadata } = body;
-        
-        // Validate required fields
-        if (!assignmentTitle || !questions || !userId || !assignmentOwnerId) {
-            return {
-                statusCode: 400,
-                headers: corsHeaders,
-                body: JSON.stringify({ error: 'Missing required fields: title, questions, userId, assignmentOwnerId' })
-            };
-        }
-        
-        // Validate question count
-        const questionCount = Object.keys(questions).length;
-        if (questionCount === 0 || questionCount > MAX_QUESTIONS) {
+        // ⭐ UPDATED: Extract new settings with defaults
+        const {
+            title,
+            questions,
+            userId,
+            assignmentOwnerId,
+            assignmentId: existingAssignmentId,
+            showCorrectAnswers = true,    // ⭐ NEW: Default to true
+            isGradedForPoints = true,     // ⭐ NEW: Default to true
+            metadata
+        } = body;
+
+        // Validation
+        if (!title || !questions || !userId || !assignmentOwnerId) {
             return {
                 statusCode: 400,
                 headers: corsHeaders,
                 body: JSON.stringify({ 
-                    error: `Invalid number of questions. Must be between 1 and ${MAX_QUESTIONS}. Received ${questionCount} questions.` 
+                    error: 'Missing required fields: title, questions, userId, assignmentOwnerId' 
                 })
             };
         }
+
+        // Generate assignment ID for new assignments
+        const assignmentId = existingAssignmentId || uuidv4();
+        const isEditing = !!existingAssignmentId;
         
-        // Validate each question and option length
-        for (const [questionKey, questionData] of Object.entries(questions)) {
-            if (questionData.question && questionData.question.length > MAX_QUESTION_LENGTH) {
-                return {
-                    statusCode: 400,
-                    headers: corsHeaders,
-                    body: JSON.stringify({ 
-                        error: `Question ${questionKey} exceeds maximum length of ${MAX_QUESTION_LENGTH} characters.` 
-                    })
-                };
-            }
+        console.log(isEditing ? 'Updating existing assignment:' : 'Creating new assignment:', assignmentId);
+
+        // ⭐ UPDATED: Separate questions and correct answers for security
+        const cleanQuestions = {};
+        const correctAnswers = {};
+        
+        Object.entries(questions).forEach(([key, question]) => {
+            // Determine question type based on correct options count
+            const correctOptionsArray = question.correctOptions || [];
+            const questionType = correctOptionsArray.length > 1 ? 'multiple' : 'single';
             
-            if (questionData.options && Array.isArray(questionData.options)) {
-                for (let i = 0; i < questionData.options.length; i++) {
-                    if (questionData.options[i] && questionData.options[i].length > MAX_OPTION_LENGTH) {
-                        return {
-                            statusCode: 400,
-                            headers: corsHeaders,
-                            body: JSON.stringify({ 
-                                error: `Question ${questionKey}, Option ${i + 1} exceeds maximum length of ${MAX_OPTION_LENGTH} characters.` 
-                            })
-                        };
-                    }
-                }
-            }
-        }
-        
-        // Generate unique assignment ID or use existing one for updates
-        const assignmentId = body.assignmentId || randomUUID();
-        
-        // ⭐ NEW: Separate student data from correct answers
-        const { studentFacingQuestions, correctAnswersVector } = processQuestionsForStorage(questions);
-        
-// ⭐ UPDATED: Prepare item with correct structure and separated correct answers
-        const assignmentItem = {
-            userId: userId,                    // PARTITION KEY - who created the assignment
-            assignmentId: assignmentId,        // SORT KEY - unique assignment identifier
-            assignmentOwnerId: assignmentOwnerId, // determines who can view vs edit
-            title: assignmentTitle,
-            questions: studentFacingQuestions,     // ⭐ NO correct answers here
-            correctAnswers: correctAnswersVector,  // ⭐ NEW: secure storage
-            createdAt: createdAt || new Date().toISOString(),
-            metadata: metadata || { totalQuestions: questionCount },
-            totalQuestions: questionCount,
-            status: 'active',
-            type: 'assignment',                 // To distinguish from user responses
-            isDraft: false                      // ⭐ NEW: Set to false when submit button is clicked
-        };
-        
-        // Get DynamoDB table name from environment variable
-        const tableName = process.env.DYNAMODB_TABLE_NAME || 'AssignmentsTable';
-        console.log('Using table:', tableName);
-        console.log('Saving assignment with separated correct answers');
-        console.log('Assignment ID:', assignmentId, 'User ID:', userId);
-        
-        // Save to DynamoDB with new secure structure
-        const dynamoCommand = new PutCommand({
-            TableName: tableName,
-            Item: assignmentItem
+            // Store clean question data (no correct answers)
+            cleanQuestions[key] = {
+                question: question.question,
+                options: question.options,
+                explanation: question.explanation,
+                points: question.points || 1,
+                questionType: questionType  // ⭐ NEW: Add question type
+            };
+            
+            // Store correct answers separately with type information
+            correctAnswers[key] = {
+                correctOptions: correctOptionsArray,
+                questionType: questionType  // ⭐ NEW: Add question type for grading
+            };
+            
+            console.log(`Question ${key}: type=${questionType}, correctOptions=${correctOptionsArray.length}`);
         });
-        
-        await dynamodb.send(dynamoCommand);
-        console.log('Assignment saved to DynamoDB with secure structure');
-        
-        // Optional: Save to S3 as .quiz file for backup
-        const bucketName = process.env.S3_BUCKET_NAME;
-        if (bucketName) {
+
+        // ⭐ UPDATED: Create assignment item with new settings
+        const assignmentItem = {
+            userId: userId,
+            assignmentId: assignmentId,
+            assignmentOwnerId: assignmentOwnerId,
+            title: title,
+            questions: cleanQuestions,          // ⭐ Clean questions only
+            correctAnswers: correctAnswers,     // ⭐ Correct answers stored separately
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            totalQuestions: Object.keys(questions).length,
+            status: 'active',
+            type: 'assignment',
+            // ⭐ NEW: Assignment settings
+            showCorrectAnswers: showCorrectAnswers,
+            isGradedForPoints: isGradedForPoints,
+            metadata: metadata || {}
+        };
+
+        console.log('Assignment item to save:', {
+            ...assignmentItem,
+            correctAnswers: '[REDACTED FOR SECURITY]' // Don't log correct answers
+        });
+
+        // Check if assignment already exists (for updates)
+        if (isEditing) {
             try {
-                const quizFileName = `assignment/${assignmentId}.quiz`;
-                const quizFileContent = JSON.stringify(assignmentItem, null, 2);
-                
-                const s3Command = new PutObjectCommand({
-                    Bucket: bucketName,
-                    Key: quizFileName,
-                    Body: quizFileContent,
-                    ContentType: 'application/json',
-                    Metadata: {
-                        'assignment-id': assignmentId,
-                        'user-id': userId,
-                        'created-at': assignmentItem.createdAt
+                const existingCommand = new GetCommand({
+                    TableName: tableName,
+                    Key: {
+                        userId: userId,
+                        assignmentId: assignmentId
                     }
                 });
                 
-                await s3Client.send(s3Command);
-                console.log('Assignment backed up to S3 successfully');
-            } catch (s3Error) {
-                console.error('Failed to save to S3 (non-critical):', s3Error);
-                // Continue execution - S3 save is optional
+                const existingResponse = await dynamodb.send(existingCommand);
+                
+                if (existingResponse.Item) {
+                    console.log('Updating existing assignment');
+                    // Keep original creation date for updates
+                    assignmentItem.createdAt = existingResponse.Item.createdAt;
+                } else {
+                    console.log('Assignment not found for update, creating new one');
+                }
+            } catch (error) {
+                console.error('Error checking existing assignment:', error);
+                // Continue with save anyway
             }
         }
-        
-        return {
+
+        // Save to DynamoDB
+        const command = new PutCommand({
+            TableName: tableName,
+            Item: assignmentItem
+        });
+
+        const result = await dynamodb.send(command);
+        console.log('DynamoDB save result:', result);
+
+        // ⭐ UPDATED: Return response with new settings
+        const response = {
             statusCode: 200,
             headers: corsHeaders,
             body: JSON.stringify({
                 success: true,
-                message: 'Assignment saved successfully with secure structure',
+                message: isEditing ? 'Assignment updated successfully' : 'Assignment saved successfully',
                 assignmentId: assignmentId,
-                totalQuestions: questionCount,
-                securityNote: 'Correct answers stored securely and separated from student data'
+                userId: userId,
+                assignmentOwnerId: assignmentOwnerId,
+                title: title,
+                totalQuestions: Object.keys(questions).length,
+                // ⭐ NEW: Include settings in response
+                showCorrectAnswers: showCorrectAnswers,
+                isGradedForPoints: isGradedForPoints,
+                timestamp: new Date().toISOString()
             })
         };
-        
+
+        console.log('Sending response:', response);
+        return response;
+
     } catch (error) {
         console.error('Error saving assignment:', error);
         
-        // Type-safe error handling
-        const errorMessage = error instanceof Error ? error.message : 'Internal server error';
-        const errorCause = error instanceof Error && error.cause ? 
-            ` Cause: ${JSON.stringify(error.cause)}` : '';
-            
         return {
             statusCode: 500,
             headers: corsHeaders,
             body: JSON.stringify({
                 error: 'Failed to save assignment',
-                message: errorMessage + errorCause,
+                details: error.message,
                 timestamp: new Date().toISOString()
             })
         };

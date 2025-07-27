@@ -9,22 +9,13 @@
     "/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
+      "static/css/app/page.css",
       "static/chunks/app/page.js"
     ],
     "/api/assignments/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/assignments/route.js"
-    ],
-    "/api/grades/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/grades/route.js"
-    ],
-    "/api/get-assignments/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/get-assignments/route.js"
     ],
     "/api/assignment-responses/route": [
       "static/chunks/webpack.js",

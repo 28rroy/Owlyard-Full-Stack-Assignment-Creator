@@ -1,74 +1,81 @@
-// types/index.ts - Global type definitions with security in mind
+// types/index.ts - Updated with new assignment settings
 
-// ⭐ Keep existing AssignmentQuestion interface for compatibility
+// ⭐ Updated AssignmentQuestion interface
 export interface AssignmentQuestion {
   question: string;
   options: string[];
-  correctOptions: number[]; // Keep this for existing components
+  correctOptions: number[];
   explanation: string;
   points: number;
 }
 
-// ⭐ NEW: Student-facing question (no correct answers) - for API responses
-export interface StudentAssignmentQuestion {
-  question: string;
-  options: string[];
-  explanation: string;
-  points: number;
-  // ⭐ correctOptions removed - students never see this in API responses
-}
-
-// ⭐ Keep existing Assignment interface for component compatibility
+// ⭐ Updated Assignment interface with new settings
 export interface Assignment {
   userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
   title: string;
-  questions: { [key: string]: AssignmentQuestion }; // Keep existing for components
+  questions: { [key: string]: AssignmentQuestion };
   createdAt: string;
   totalQuestions: number;
   status: string;
   type: string;
+  // ⭐ NEW: Assignment settings
+  showCorrectAnswers?: boolean;  // Default: true
+  isGradedForPoints?: boolean;   // Default: true
 }
 
-// ⭐ NEW: Clean assignment type for API responses (what students actually receive)
+// ⭐ Student-facing question (no correct answers)
+export interface StudentAssignmentQuestion {
+  question: string;
+  options: string[];
+  explanation: string;
+  points: number;
+}
+
+// ⭐ Clean assignment type for API responses (what students receive)
 export interface CleanAssignment {
   userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
   title: string;
-  questions: { [key: string]: StudentAssignmentQuestion }; // ⭐ Clean questions for API
+  questions: { [key: string]: StudentAssignmentQuestion };
   createdAt: string;
   totalQuestions: number;
   status: string;
   type: string;
-  // ⭐ correctAnswers field removed - students never see this
+  // ⭐ NEW: Settings still passed to student (they need to know display rules)
+  showCorrectAnswers?: boolean;
+  isGradedForPoints?: boolean;
 }
 
-// ⭐ NEW: Server-side assignment with separated correct answers
+// ⭐ Server-side assignment with separated correct answers
 export interface ServerAssignment {
   userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
   title: string;
-  questions: { [key: string]: StudentAssignmentQuestion }; // Clean questions
-  correctAnswers: { [key: string]: { correctOptions: number[] } }; // ⭐ Secure storage
+  questions: { [key: string]: StudentAssignmentQuestion };
+  correctAnswers: { [key: string]: { correctOptions: number[] } };
   createdAt: string;
   totalQuestions: number;
   status: string;
   type: string;
+  // ⭐ NEW: Settings
+  showCorrectAnswers?: boolean;
+  isGradedForPoints?: boolean;
 }
 
-// ⭐ NEW: Updated assignment response with automatic grading
+// ⭐ Updated assignment response interface
 export interface AssignmentResponse {
   userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
   userAssignmentResponse: number[];
-  score: number;           // ⭐ NEW: Automatically calculated score
-  totalPoints: number;     // ⭐ NEW: Total possible points
-  percentage: number;      // ⭐ NEW: Percentage score
-  gradingDetails: Array<{  // ⭐ NEW: Detailed grading information
+  score: number;
+  totalPoints: number;
+  percentage: number;
+  gradingDetails: Array<{
     questionKey: string;
     questionPoints: number;
     studentAnswer: number;
@@ -81,17 +88,32 @@ export interface AssignmentResponse {
   type: string;
 }
 
-// ⭐ NEW: Function to convert clean assignment to component assignment
+// ⭐ Security verification function
+export function verifyStudentDataSecurity(assignment: Assignment | CleanAssignment): boolean {
+  // Check if assignment has correct answers in questions (it shouldn't for students)
+  const questions = Object.values(assignment.questions);
+  for (const question of questions) {
+    // Check if correctOptions exists and has actual values
+    if ('correctOptions' in question) {
+      const correctOptions = (question as any).correctOptions;
+      if (correctOptions && Array.isArray(correctOptions) && correctOptions.length > 0) {
+        console.error('Security violation: Student data contains correct answers');
+        return false;
+      }
+    }
+  }
+  console.log('✅ Student data security verified - no correct answers found');
+  return true;
+}
+
+// ⭐ Function to convert clean assignment to component assignment
 export function cleanToComponentAssignment(cleanAssignment: CleanAssignment): Assignment {
   const componentQuestions: { [key: string]: AssignmentQuestion } = {};
   
   Object.entries(cleanAssignment.questions).forEach(([key, question]) => {
     componentQuestions[key] = {
-      question: question.question,
-      options: question.options,
-      correctOptions: [], // Empty for students - components won't use this
-      explanation: question.explanation,
-      points: question.points
+      ...question,
+      correctOptions: [] // Empty for students
     };
   });
   
@@ -99,89 +121,4 @@ export function cleanToComponentAssignment(cleanAssignment: CleanAssignment): As
     ...cleanAssignment,
     questions: componentQuestions
   };
-}
-
-// ⭐ NEW: Security verification function
-export function verifyStudentDataSecurity(assignment: any): boolean {
-  // Check if assignment has populated correct answers (security breach for students)
-  const hasCorrectAnswers = assignment.questions && 
-    Object.values(assignment.questions).some((q: any) => 
-      q.correctOptions !== undefined && Array.isArray(q.correctOptions) && q.correctOptions.length > 0
-    );
-  const hasCorrectAnswersField = assignment.correctAnswers !== undefined;
-  
-  if (hasCorrectAnswers || hasCorrectAnswersField) {
-    console.error('🚨 SECURITY VIOLATION: Student received correct answers');
-    return false;
-  }
-  
-  return true;
-}
-
-// ⭐ NEW: API Response types with data type indicators
-export interface AssignmentListResponse {
-  success: boolean;
-  assignments: Assignment[] | CleanAssignment[];
-  count: number;
-  dataType: 'complete' | 'student-safe'; // ⭐ Indicates data security level
-  debug?: any;
-}
-
-export interface AssignmentDetailResponse {
-  success: boolean;
-  assignment: Assignment | CleanAssignment;
-  dataType: 'complete' | 'student-safe'; // ⭐ Indicates data security level
-}
-
-export interface AssignmentSubmissionResponse {
-  success: boolean;
-  message: string;
-  score: number;
-  totalPoints: number;
-  percentage: number;
-  gradingSummary: string;
-  submittedAt: string;
-}
-
-// ⭐ NEW: User context types
-export interface UserContext {
-  userId: string;
-  isTeacher: boolean;
-  assignmentOwnerId: string;
-  userRole: 'teacher' | 'student';
-}
-
-// ⭐ NEW: Security configuration
-export const SECURITY_CONFIG = {
-  MAX_QUESTION_LENGTH: 1000,
-  MAX_OPTION_LENGTH: 500,
-  MAX_QUESTIONS: 100,
-  REQUIRE_SECURITY_VERIFICATION: true,
-  LOG_SECURITY_VIOLATIONS: true,
-} as const;
-
-// ⭐ NEW: Grading configuration
-export const GRADING_CONFIG = {
-  PASSING_PERCENTAGE: 70,
-  GRADE_SCALE: {
-    A: 90,
-    B: 80,
-    C: 70,
-    D: 60,
-    F: 0
-  }
-} as const;
-
-// ⭐ NEW: Helper function to get letter grade
-export function getLetterGrade(percentage: number): string {
-  if (percentage >= GRADING_CONFIG.GRADE_SCALE.A) return 'A';
-  if (percentage >= GRADING_CONFIG.GRADE_SCALE.B) return 'B';
-  if (percentage >= GRADING_CONFIG.GRADE_SCALE.C) return 'C';
-  if (percentage >= GRADING_CONFIG.GRADE_SCALE.D) return 'D';
-  return 'F';
-}
-
-// ⭐ NEW: Helper function to determine if passing
-export function isPassingGrade(percentage: number): boolean {
-  return percentage >= GRADING_CONFIG.PASSING_PERCENTAGE;
 }

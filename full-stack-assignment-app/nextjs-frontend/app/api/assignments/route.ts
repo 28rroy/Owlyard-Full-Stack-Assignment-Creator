@@ -1,156 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server';
+// nextjs-frontend/app/api/assignments/route.ts
+import { NextResponse } from 'next/server';
 
-// Validation constants (must match backend)
-const MAX_QUESTION_LENGTH = 1000;
-const MAX_OPTION_LENGTH = 500;
-const MAX_QUESTIONS = 100;
-
-// ⭐ Add proper typing for the assignment data structure
-interface QuestionData {
-  question: string;
-  options: string[];
-  correctOptions: number[];
-  explanation: string;
-  points: number;
-}
-
-interface AssignmentData {
-  title: string;
-  questions: { [key: string]: QuestionData };
-  userId: string;
-  assignmentOwnerId: string;
-  createdAt?: string;
-  metadata?: any;
-  assignmentId?: string;
-}
-
-export async function POST(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const assignmentData: AssignmentData = await request.json();
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
+    const assignmentId = searchParams.get('assignmentId');
+    const requestingUserId = searchParams.get('requestingUserId');
+    const userRole = searchParams.get('userRole');
     
-    // Validate the assignment data
-    if (!assignmentData.title || !assignmentData.questions || !assignmentData.userId) {
-      return NextResponse.json(
-        { error: 'Missing required fields: title, questions, userId' },
-        { status: 400 }
-      );
-    }
+    console.log('GET /api/assignments - Parameters:', { 
+      userId, 
+      assignmentId, 
+      requestingUserId, 
+      userRole 
+    });
 
-    // Validate question count
-    const questionCount = Object.keys(assignmentData.questions).length;
-    if (questionCount === 0 || questionCount > MAX_QUESTIONS) {
-      return NextResponse.json(
-        { error: `Invalid number of questions. Must be between 1 and ${MAX_QUESTIONS}. Received ${questionCount} questions.` },
-        { status: 400 }
-      );
-    }
-
-    // ⭐ UPDATED: Validate question and option lengths with proper typing
-    for (const [questionKey, questionData] of Object.entries(assignmentData.questions)) {
-      if (questionData.question && questionData.question.length > MAX_QUESTION_LENGTH) {
-        return NextResponse.json(
-          { error: `Question ${questionKey} exceeds maximum length of ${MAX_QUESTION_LENGTH} characters.` },
-          { status: 400 }
-        );
-      }
-      
-      if (questionData.options && Array.isArray(questionData.options)) {
-        for (let i = 0; i < questionData.options.length; i++) {
-          if (questionData.options[i] && questionData.options[i].length > MAX_OPTION_LENGTH) {
-            return NextResponse.json(
-              { error: `Question ${questionKey}, Option ${i + 1} exceeds maximum length of ${MAX_OPTION_LENGTH} characters.` },
-              { status: 400 }
-            );
-          }
-        }
-      }
-    }
-
-    // Get your API Gateway URL from environment variables
     const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
     
-    // Check if environment variable is properly set
-    if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL' || apiGatewayUrl.includes('your-api-id')) {
+    if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL') {
       return NextResponse.json(
         { 
           error: 'API Gateway URL not configured properly',
-          details: `Current value: ${apiGatewayUrl}`,
-          fix: 'Please check your .env.local file'
+          details: `Current value: ${apiGatewayUrl}`
         },
         { status: 500 }
       );
     }
     
-    const fullUrl = `${apiGatewayUrl}/save-assignment`;
-    
-    // Call your Lambda function via API Gateway
-    const response = await fetch(fullUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(assignmentData),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.error || result.message || `HTTP ${response.status}: Failed to save assignment`);
-    }
-
-    return NextResponse.json(result);
-
-  } catch (error: unknown) {
-    console.error('Error saving assignment:', error);
-    
-    // Type-safe error handling
-    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
-    const errorCause = error instanceof Error && error.cause ? 
-      ` Cause: ${JSON.stringify(error.cause)}` : '';
-      
-    return NextResponse.json(
-      {
-        error: 'Failed to save assignment',
-        message: errorMessage + errorCause,
-        timestamp: new Date().toISOString()
-      },
-      { status: 500 }
-    );
-  }
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-    const requestingUserId = searchParams.get('requestingUserId');
-    const userRole = searchParams.get('userRole');
-    
-    // Get your API Gateway URL from environment variables
-    const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
-    
-    if (!apiGatewayUrl) {
-      return NextResponse.json(
-        { error: 'API Gateway URL not configured' },
-        { status: 500 }
-      );
-    }
-    
-    // ⭐ NEW: Build URL with security parameters
-    let fullUrl = `${apiGatewayUrl}/get-assignments`;
+    // ⭐ UPDATED: Build URL with all parameters including new settings support
     const params = new URLSearchParams();
-    
     if (userId) params.append('userId', userId);
+    if (assignmentId) params.append('assignmentId', assignmentId);
     if (requestingUserId) params.append('requestingUserId', requestingUserId);
     if (userRole) params.append('userRole', userRole);
     
-    if (params.toString()) {
-      fullUrl += `?${params.toString()}`;
-    }
+    const fullUrl = `${apiGatewayUrl}/get-assignments?${params.toString()}`;
+    console.log('Making request to:', fullUrl);
     
-    console.log('Fetching assignments from:', fullUrl);
-    
-    // Call your Lambda function via API Gateway
     const response = await fetch(fullUrl, {
       method: 'GET',
       headers: {
@@ -158,17 +45,55 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const result = await response.json();
+    const responseText = await response.text();
+    console.log('Raw response:', responseText);
 
-    if (!response.ok) {
-      throw new Error(result.error || result.message || `HTTP ${response.status}: Failed to get assignments`);
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse response as JSON:', parseError);
+      return NextResponse.json(
+        { 
+          error: 'Invalid JSON response from server',
+          details: responseText,
+          status: response.status
+        },
+        { status: 500 }
+      );
     }
 
-    // ⭐ NEW: Log security verification
-    if (result.dataType === 'student-safe') {
-      console.log('✅ Returning student-safe data (no correct answers)');
-    } else if (result.dataType === 'complete') {
-      console.log('✅ Returning complete data for teacher/grading');
+    if (!response.ok) {
+      console.error('API response not ok:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: result
+      });
+      
+      return NextResponse.json(
+        { 
+          error: 'Server error',
+          details: result,
+          status: response.status
+        },
+        { status: response.status }
+      );
+    }
+
+    // ⭐ UPDATED: Log assignment settings for debugging
+    if (result.assignment) {
+      console.log('Single assignment settings:', {
+        title: result.assignment.title,
+        showCorrectAnswers: result.assignment.showCorrectAnswers,
+        isGradedForPoints: result.assignment.isGradedForPoints
+      });
+    }
+    
+    if (result.assignments) {
+      console.log(`Retrieved ${result.assignments.length} assignments with settings`);
+      result.assignments.forEach((assignment: any) => {
+        console.log(`${assignment.title}: showCorrectAnswers=${assignment.showCorrectAnswers}, isGradedForPoints=${assignment.isGradedForPoints}`);
+      });
     }
 
     return NextResponse.json(result);
@@ -179,10 +104,199 @@ export async function GET(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'Internal server error';
     
     return NextResponse.json(
-      {
-        error: 'Failed to get assignments',
-        message: errorMessage,
-        timestamp: new Date().toISOString()
+      { 
+        error: errorMessage,
+        apiUrl: process.env.NEXT_PUBLIC_API_GATEWAY_URL,
+        stack: error instanceof Error ? error.stack : undefined
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    console.log('POST /api/assignments - Body received:', {
+      title: body.title,
+      userId: body.userId,
+      assignmentOwnerId: body.assignmentOwnerId,
+      totalQuestions: body.metadata?.totalQuestions,
+      // ⭐ NEW: Log new settings
+      showCorrectAnswers: body.showCorrectAnswers,
+      isGradedForPoints: body.isGradedForPoints,
+      assignmentId: body.assignmentId ? '(editing)' : '(new)'
+    });
+
+    const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
+    
+    if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL') {
+      return NextResponse.json(
+        { 
+          error: 'API Gateway URL not configured properly',
+          details: `Current value: ${apiGatewayUrl}`
+        },
+        { status: 500 }
+      );
+    }
+    
+    const fullUrl = `${apiGatewayUrl}/save-assignment`;
+    console.log('Making POST request to:', fullUrl);
+    
+    const response = await fetch(fullUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const responseText = await response.text();
+    console.log('POST response:', responseText);
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse POST response as JSON:', parseError);
+      return NextResponse.json(
+        { 
+          error: 'Invalid JSON response from server',
+          details: responseText,
+          status: response.status
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!response.ok) {
+      console.error('POST API response not ok:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: result
+      });
+      
+      return NextResponse.json(
+        { 
+          error: 'Server error',
+          details: result,
+          status: response.status
+        },
+        { status: response.status }
+      );
+    }
+
+    // ⭐ UPDATED: Log successful save with new settings
+    console.log('Assignment saved successfully:', {
+      assignmentId: result.assignmentId,
+      title: result.title,
+      showCorrectAnswers: result.showCorrectAnswers,
+      isGradedForPoints: result.isGradedForPoints
+    });
+
+    return NextResponse.json(result);
+
+  } catch (error: unknown) {
+    console.error('Error saving assignment:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    
+    return NextResponse.json(
+      { 
+        error: errorMessage,
+        apiUrl: process.env.NEXT_PUBLIC_API_GATEWAY_URL,
+        stack: error instanceof Error ? error.stack : undefined
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const body = await request.json();
+    console.log('DELETE /api/assignments - Body received:', {
+      userId: body.userId,
+      assignmentId: body.assignmentId,
+      assignmentOwnerId: body.assignmentOwnerId
+    });
+
+    const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
+    
+    if (!apiGatewayUrl || apiGatewayUrl === 'YOUR_API_GATEWAY_URL') {
+      return NextResponse.json(
+        { 
+          error: 'API Gateway URL not configured properly',
+          details: `Current value: ${apiGatewayUrl}`
+        },
+        { status: 500 }
+      );
+    }
+    
+    const fullUrl = `${apiGatewayUrl}/delete-assignment`;
+    console.log('Making DELETE request to:', fullUrl);
+    
+    const response = await fetch(fullUrl, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const responseText = await response.text();
+    console.log('DELETE response:', responseText);
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse DELETE response as JSON:', parseError);
+      return NextResponse.json(
+        { 
+          error: 'Invalid JSON response from server',
+          details: responseText,
+          status: response.status
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!response.ok) {
+      console.error('DELETE API response not ok:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: result
+      });
+      
+      return NextResponse.json(
+        { 
+          error: 'Server error',
+          details: result,
+          status: response.status
+        },
+        { status: response.status }
+      );
+    }
+
+    console.log('Assignment deleted successfully:', {
+      assignmentId: result.deletedAssignment?.assignmentId,
+      title: result.deletedAssignment?.title,
+      deletedResponsesCount: result.deletedResponsesCount
+    });
+
+    return NextResponse.json(result);
+
+  } catch (error: unknown) {
+    console.error('Error deleting assignment:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+    
+    return NextResponse.json(
+      { 
+        error: errorMessage,
+        apiUrl: process.env.NEXT_PUBLIC_API_GATEWAY_URL,
+        stack: error instanceof Error ? error.stack : undefined
       },
       { status: 500 }
     );

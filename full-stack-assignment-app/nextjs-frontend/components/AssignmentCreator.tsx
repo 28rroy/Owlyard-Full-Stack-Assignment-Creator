@@ -1,10 +1,60 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Check, Pencil, Eye, X, FileText, Send } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
-import { MathJax } from "@/components/MathJax";
-import { LatexHelp } from "@/components/LatexHelp";
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+import { KaTeXHelp } from "@/components/KaTeXHelp";
+
+// KaTeX Renderer Component (React 19 compatible replacement for MathJax)
+const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({ 
+  children, 
+  className = '' 
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (ref.current && children) {
+      try {
+        ref.current.innerHTML = '';
+        
+        if (children.includes('$') || children.includes('\\')) {
+          let processedContent = children;
+          
+          // Replace display math ($$...$$)
+          processedContent = processedContent.replace(/\$\$(.*?)\$\$/g, (match, math) => {
+            try {
+              return katex.renderToString(math, { displayMode: true });
+            } catch (e: any) {
+              return `<span style="color: red;">Math Error: ${math}</span>`;
+            }
+          });
+          
+          // Replace inline math ($...$)
+          processedContent = processedContent.replace(/\$([^$]*?)\$/g, (match, math) => {
+            try {
+              return katex.renderToString(math, { displayMode: false });
+            } catch (e: any) {
+              return `<span style="color: red;">Math Error: ${math}</span>`;
+            }
+          });
+          
+          ref.current.innerHTML = processedContent;
+        } else {
+          ref.current.textContent = children;
+        }
+      } catch (error) {
+        console.error('KaTeX rendering error:', error);
+        if (ref.current) {
+          ref.current.innerHTML = `<span style="color: red;">Render Error: ${children}</span>`;
+        }
+      }
+    }
+  }, [children]);
+
+  return <div ref={ref} className={className} />;
+};
 
 type QuestionData = {
   question: string;
@@ -75,6 +125,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
   const [assignmentTitle, setAssignmentTitle] = useState<string>("");
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [isGradedForPoints, setIsGradedForPoints] = useState<boolean>(true);
+  const [showCorrectAnswers, setShowCorrectAnswers] = useState<boolean>(true);
 
   // Load assignment data when editing
   useEffect(() => {
@@ -82,6 +134,10 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
       console.log('🔍 Loading assignment for editing:', editingAssignment);
       setIsEditing(true);
       setAssignmentTitle(editingAssignment.title);
+      
+      // Load assignment settings
+      setIsGradedForPoints((editingAssignment as any).isGradedForPoints ?? true);
+      setShowCorrectAnswers((editingAssignment as any).showCorrectAnswers ?? true);
       
       // Convert API format back to form format
       const formQuestions: QuestionData[] = [];
@@ -233,7 +289,9 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           totalQuestions: Object.keys(assignmentData).length
         },
         userId: userId,
-        assignmentOwnerId: assignmentOwnerId
+        assignmentOwnerId: assignmentOwnerId,
+        isGradedForPoints: isGradedForPoints,
+        showCorrectAnswers: showCorrectAnswers
       };
 
       // Add assignment ID if editing
@@ -321,7 +379,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               {isEditing ? 'Edit Assignment' : 'Assignment Creator'}
             </h1>
             <div className="flex items-center gap-3">
-              <LatexHelp />
+              <KaTeXHelp />
               <button
                 onClick={handleClose}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -337,7 +395,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
           <div className="max-w-4xl mx-auto">
             {/* Assignment Title */}
-            <div className="mb-6 p-4 bg-blue-50 rounded-md border">
+            <div className="mb-6 p-4 bg-blue-50 rounded-md border border-slate-600/30">
               <label className="block text-teal-800 font-medium mb-2">
                 Assignment Title *
               </label>
@@ -351,6 +409,51 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               />
             </div>
 
+            {/* Assignment Settings */}
+            <div className="mb-6 p-4 bg-teal-50 rounded-md border border-teal-200">
+              <h3 className="text-teal-800 font-medium mb-3">Assignment Settings</h3>
+              
+              <div className="space-y-3">
+                {/* Grading Option */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="gradedForPoints"
+                    checked={isGradedForPoints}
+                    onChange={(e) => setIsGradedForPoints(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                  />
+                  <label htmlFor="gradedForPoints" className="text-teal-800 font-medium">
+                    Grade this assignment for points
+                  </label>
+                </div>
+                {!isGradedForPoints && (
+                  <div className="ml-7 text-sm text-teal-600">
+                    Students will see completion status only, no scores or grades
+                  </div>
+                )}
+
+                {/* Show Correct Answers Option */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="showCorrectAnswers"
+                    checked={showCorrectAnswers}
+                    onChange={(e) => setShowCorrectAnswers(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                  />
+                  <label htmlFor="showCorrectAnswers" className="text-teal-800 font-medium">
+                    Show correct answers to students after submission
+                  </label>
+                </div>
+                {!showCorrectAnswers && (
+                  <div className="ml-7 text-sm text-teal-600">
+                    Students will only see if they got questions right/wrong, not which answers were correct
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Questions */}
             {questions.map((q, qIndex) => (
               <div
@@ -360,17 +463,22 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                 {/* Question Header with Points */}
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={q.points}
-                      onChange={(e) => updateQuestion(qIndex, { points: parseInt(e.target.value) || 1 })}
-                      className="w-16 p-2 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500 text-center"
-                    />
-                    <span className="text-gray-600 text-sm">pts</span>
-                  </div>
+                  {isGradedForPoints && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={q.points}
+                        onChange={(e) => updateQuestion(qIndex, { points: parseInt(e.target.value) || 1 })}
+                        className="w-16 p-2 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500 text-center"
+                      />
+                      <span className="text-gray-600 text-sm">pts</span>
+                    </div>
+                  )}
+                  {!isGradedForPoints && (
+                    <span className="text-sm text-gray-500 italic">Not graded</span>
+                  )}
                 </div>
 
                 {/* Question Input */}
@@ -428,9 +536,9 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   
                   {/* Question Preview */}
                   {q.showQuestionPreview && q.question && (
-                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                      <div className="text-xs text-yellow-800 font-medium mb-2">LaTeX Preview:</div>
-                      <MathJax className="text-gray-800">{q.question}</MathJax>
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                      <div className="text-xs text-blue-800 font-medium mb-2">LaTeX Preview:</div>
+                      <KaTeXRenderer className="text-gray-800">{q.question}</KaTeXRenderer>
                     </div>
                   )}
                 </div>
@@ -456,8 +564,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
 
                 {/* Correct Answer Instructions */}
                 {q.options.length > 0 && (
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-md">
-                    <p className="text-sm text-green-800 font-medium">
+                  <div className="p-3 bg-teal-50 border border-teal-200 rounded-md">
+                    <p className="text-sm text-teal-800 font-medium">
                       ✓ Check the boxes next to the correct answer(s)
                     </p>
                   </div>
@@ -471,7 +579,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   return (
                     <div key={i} className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="text-sm text-gray-700">Option {i + 1}</label>
+                        <label className="text-sm text-teal-700">Option {i + 1}</label>
                         <button
                           type="button"
                           onClick={() => {
@@ -522,7 +630,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                       {q.showOptionPreviews?.[i] && opt && (
                         <div className="p-2 bg-blue-50 border border-blue-200 rounded-md ml-8">
                           <div className="text-xs text-blue-800 font-medium mb-1">LaTeX Preview:</div>
-                          <MathJax className="text-gray-800">{opt}</MathJax>
+                          <KaTeXRenderer className="text-gray-800">{opt}</KaTeXRenderer>
                         </div>
                       )}
                     </div>
@@ -534,7 +642,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   <div className="flex items-center justify-between mt-4">
                     <p className="text-teal-800 font-medium">
                       {q.correctAnswers.length > 0 && (
-                        <span className="text-green-600">
+                        <span className="text-teal-600">
                           {q.correctAnswers.length} correct answer{q.correctAnswers.length !== 1 ? 's' : ''} selected
                         </span>
                       )}
@@ -564,14 +672,14 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   {!q.showExplanation ? (
                     <button
                       onClick={() => updateQuestion(qIndex, { showExplanation: true })}
-                      className="mt-4 bg-orange-400 text-white px-3 py-2 rounded-md hover:bg-orange-500 transition"
+                      className="mt-4 text-orange-600 px-3 py-2 rounded-md hover:bg-orange-100 transition"
                     >
                       + Add Explanation
                     </button>
                   ) : (
                     <div className="mt-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="text-sm text-gray-700">Explanation (optional)</label>
+                        <label className="text-sm text-teal-700">Explanation (optional)</label>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -599,9 +707,9 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                       
                       {/* Explanation Preview */}
                       {q.showExplanationPreview && q.explanation && (
-                        <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
-                          <div className="text-xs text-orange-800 font-medium mb-2">LaTeX Preview:</div>
-                          <MathJax className="text-gray-800">{q.explanation}</MathJax>
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                          <div className="text-xs text-blue-800 font-medium mb-2">LaTeX Preview:</div>
+                          <KaTeXRenderer className="text-gray-800">{q.explanation}</KaTeXRenderer>
                         </div>
                       )}
                     </div>
@@ -621,15 +729,15 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               className={`px-4 py-2 rounded transition ${
                 questions.length >= MAX_QUESTIONS
                   ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
-                  : 'bg-red-400 text-white hover:bg-red-500'
+                  : 'text-red-500 hover:bg-red-200'
               }`}
             >
-              + Add Question ({questions.length}/{MAX_QUESTIONS})
+              + Question ({questions.length}/{MAX_QUESTIONS})
             </button>
             
             <div className="flex items-center gap-3">
               <button
-                className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded transition hover:bg-gray-600"
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded transition hover:bg-teal-700"
               >
                 <FileText size={20}/>
                 Save as Draft
@@ -641,7 +749,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                 className={`flex items-center gap-2 px-4 py-2 rounded transition ${
                   isAssignmentValid() && !isSaving
                     ? 'bg-teal-600 text-white hover:bg-teal-700'
-                    : 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                    : 'bg-teal-500 text-white cursor-not-allowed'
                 }`}
               >
                 <Send size={20}/>

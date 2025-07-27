@@ -7,6 +7,6 @@ architecture = "x86_64"
 handler = "save_assignment.handler"
 manifest_hash = ""
 packagetype = "Zip"
-functions = ["SaveAssignmentFunction", "GetAssignmentsFunction", "AssignmentResponsesFunction", "SaveGradesFunction", "ReadGradesFunction"]
+functions = ["SaveAssignmentFunction", "GetAssignmentsFunction", "DeleteAssignmentFunction", "AssignmentResponsesFunction", "SaveGradesFunction", "ReadGradesFunction"]
 
 [layer_build_definitions]

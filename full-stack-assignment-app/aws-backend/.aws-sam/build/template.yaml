@@ -178,6 +178,32 @@ Resources:
             Method: options
     Metadata:
       SamResourceId: GetAssignmentsFunction
+  DeleteAssignmentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: DeleteAssignmentFunction
+      Handler: delete_assignment.handler
+      Role:
+        Fn::GetAtt:
+        - CommonLambdaExecutionRole
+        - Arn
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME:
+            Ref: AssignmentsTable
+      Events:
+        DeleteAssignment:
+          Type: Api
+          Properties:
+            Path: /delete-assignment
+            Method: delete
+        DeleteAssignmentOptions:
+          Type: Api
+          Properties:
+            Path: /delete-assignment
+            Method: options
+    Metadata:
+      SamResourceId: DeleteAssignmentFunction
   AssignmentResponsesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -276,6 +302,10 @@ Outputs:
     Description: API Gateway endpoint URL for Get Assignments function
     Value:
       Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get-assignments
+  DeleteAssignmentApi:
+    Description: API Gateway endpoint URL for Delete Assignment function
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/delete-assignment
   AssignmentResponsesApi:
     Description: API Gateway endpoint URL for Assignment Responses function
     Value:
