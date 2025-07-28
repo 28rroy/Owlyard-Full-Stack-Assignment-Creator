@@ -3,11 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Users, Trophy, Clock, CheckCircle, X, FileText, BarChart3, Check, Pencil } from 'lucide-react';
 
-// Types - Updated to handle both clean and complete assignment data
 interface AssignmentQuestion {
   question: string;
   options: string[];
-  correctOptions?: number[]; // Optional for clean data
+  correctOptions?: number[];
   explanation: string;
   points: number;
 }
@@ -24,19 +23,18 @@ interface Assignment {
   type: string;
 }
 
-// ✅ UPDATED: Interface to support both single and multiple selections
 interface StudentResponse {
   userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
-  userAssignmentResponse: (number | number[])[]; // ✅ FIXED: Support mixed response types
-  score?: number; // ⭐ NEW: Auto-graded score from backend
-  totalPoints?: number; // ⭐ NEW: Auto-graded total points
-  percentage?: number; // ⭐ NEW: Auto-graded percentage
-  gradingDetails?: Array<{ // ⭐ NEW: Detailed grading from backend
+  userAssignmentResponse: (number | number[])[];
+  score?: number;
+  totalPoints?: number;
+  percentage?: number;
+  gradingDetails?: Array<{
     questionKey: string;
     questionPoints: number;
-    studentAnswer: number | number[]; // ✅ FIXED: Support both single and multiple selections
+    studentAnswer: number | number[];
     correctOptions: number[];
     isCorrect: boolean;
     pointsEarned: number;
@@ -57,27 +55,49 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
   const [selectedStudent, setSelectedStudent] = useState<StudentResponse | null>(null);
   const [showDetailedView, setShowDetailedView] = useState(false);
 
-  // Debug log to check assignment data
   useEffect(() => {
-    console.log('🔍 StudentResultsViewer Assignment data received:', assignment);
-    console.log('🔍 Assignment questions:', assignment?.questions);
+    // console.log('StudentResultsViewer Assignment data received:', assignment);
+    // console.log('Assignment questions:', assignment?.questions);
     fetchStudentResponses();
   }, [assignment.assignmentId]);
 
   const fetchStudentResponses = async () => {
+    setLoading(true);
+    // console.log('Fetching responses for assignment:', assignment.assignmentId);
+    
     try {
-      console.log('🔍 Fetching responses for assignment:', assignment.assignmentId);
-      
+      // 🔧 FIX: Use grades API instead of assignment-responses
+      // The assignment-responses API doesn't support get-all-responses action
+      // Use grades API which supports get-all-grades-for-assignment
       const response = await fetch(
-        `/api/assignment-responses?action=get-all-responses&assignmentId=${assignment.assignmentId}`
+        `/api/grades?assignmentId=${assignment.assignmentId}&action=get-all-grades-for-assignment`
       );
       
       if (response.ok) {
         const data = await response.json();
-        console.log('🔍 Student responses received:', data.responses);
-        setStudentResponses(data.responses || []);
+        console.log('🔍 Student grades received:', data);
+        
+        // Convert grades to response format for compatibility
+        const convertedResponses = (data.grades || []).map((grade: any) => ({
+          userId: grade.userId,
+          assignmentId: grade.assignmentId,
+          assignmentOwnerId: grade.assignmentOwnerId || assignment.assignmentOwnerId,
+          userAssignmentResponse: grade.userAssignmentResponse || [],
+          score: grade.score,
+          totalPoints: grade.totalPoints,
+          percentage: grade.percentage,
+          gradingDetails: grade.gradingDetails,
+          submittedAt: grade.submittedAt || grade.gradedAt,
+          status: grade.status || 'completed',
+          type: grade.type || 'assignment-response'
+        }));
+        
+        console.log('🔍 Converted responses:', convertedResponses);
+        setStudentResponses(convertedResponses);
       } else {
-        console.error('❌ Failed to fetch student responses:', response.status);
+        console.error('❌ Failed to fetch student grades:', response.status);
+        const errorData = await response.json();
+        console.error('❌ Error details:', errorData);
         setStudentResponses([]);
       }
     } catch (error) {
@@ -88,11 +108,9 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
     }
   };
 
-  // ✅ UPDATED: Fixed fallback calculation with proper multiple choice support
   const calculateStudentScore = (studentResponse: StudentResponse): { score: number; totalPoints: number; percentage: number } => {
-    // ⭐ NEW: If backend already calculated the score, use that
     if (studentResponse.score !== undefined && studentResponse.totalPoints !== undefined && studentResponse.percentage !== undefined) {
-      console.log('✅ Using backend-calculated score for', studentResponse.userId);
+      // console.log('Using backend-calculated score for', studentResponse.userId);
       return {
         score: studentResponse.score,
         totalPoints: studentResponse.totalPoints,
@@ -100,8 +118,7 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
       };
     }
 
-    // ✅ UPDATED: Frontend calculation with proper multiple choice support
-    console.log('⚠️ Using frontend fallback calculation for', studentResponse.userId);
+    // console.log('Using frontend fallback calculation for', studentResponse.userId);
     
     if (!studentResponse.userAssignmentResponse || !assignment.questions) {
       return { score: 0, totalPoints: 0, percentage: 0 };
@@ -116,19 +133,15 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
       const userAnswer = studentResponse.userAssignmentResponse[index];
       const correctAnswers = question.correctOptions;
       
-      // ⭐ SAFETY CHECK: Only calculate if correctOptions exists
       if (correctAnswers && Array.isArray(correctAnswers)) {
         if (correctAnswers.length === 1) {
-          // Single choice question
           const studentChoice = Array.isArray(userAnswer) ? userAnswer[0] : userAnswer;
           if (studentChoice === correctAnswers[0]) {
             score += question.points;
           }
         } else {
-          // ✅ FIXED: Multiple choice question - match backend logic
           const studentSelections = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
           
-          // Student must select ALL correct answers and NO incorrect ones
           const hasAllCorrect = correctAnswers.every(correctOption => 
             studentSelections.includes(correctOption)
           );
@@ -143,7 +156,7 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
           }
         }
       } else {
-        console.warn('⚠️ No correct answers available for question', index, '- cannot calculate score');
+        // console.warn('No correct answers available for question', index, '- cannot calculate score');
       }
     });
 
@@ -194,7 +207,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
 
   return (
     <div className="p-6 max-h-[90vh] overflow-y-auto">
-      {/* Header - matching AssignmentCreator style */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-teal-800 mb-2">Student Results</h1>
@@ -209,7 +221,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
         </button>
       </div>
 
-      {/* Assignment Info - matching AssignmentCreator blue background style */}
       <div className="mb-6 p-4 bg-blue-50 rounded-md border">
         <h3 className="text-teal-800 font-medium mb-3">Assignment Information</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
@@ -234,7 +245,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
         </div>
       </div>
 
-      {/* Class Statistics - using white cards with borders like questions */}
       <div className="mb-6">
         <h3 className="text-xl font-semibold text-teal-800 mb-4">Class Statistics</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -272,7 +282,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
         </div>
       </div>
 
-      {/* Toggle Detailed View */}
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-xl font-semibold text-teal-800">
           Individual Results ({studentResponses.length} submissions)
@@ -291,12 +300,14 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
         </div>
       </div>
 
-      {/* Student Responses */}
       {studentResponses.length === 0 ? (
         <div className="border border-gray-200 p-8 rounded-md bg-white shadow-sm text-center">
           <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-600 mb-2">No submissions yet</h3>
           <p className="text-gray-500">Students haven't submitted responses for this assignment yet.</p>
+          <div className="mt-4 text-sm text-gray-400">
+            Debug: Assignment ID = {assignment.assignmentId}
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -311,7 +322,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                 className="border border-gray-200 p-4 rounded-md bg-white shadow-sm cursor-pointer hover:shadow-md transition-shadow"
                 onClick={() => setSelectedStudent(isSelected ? null : response)}
               >
-                {/* Student Header */}
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-2 flex-wrap">
@@ -344,12 +354,10 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                   </div>
                 </div>
 
-                {/* ✅ UPDATED: Detailed Response View with multiple choice support */}
                 {showDetailedView && isSelected && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <h4 className="font-medium text-teal-800 mb-3">Detailed Responses</h4>
                     <div className="space-y-4">
-                      {/* ⭐ Use backend grading details if available */}
                       {response.gradingDetails ? (
                         response.gradingDetails.map((detail, qIndex) => (
                           <div key={detail.questionKey} className="bg-gray-50 rounded-md p-3 border">
@@ -358,7 +366,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                               {assignment.questions[detail.questionKey]?.question || 'Question not found'}
                             </div>
                             
-                            {/* ✅ ADDED: Multiple choice indicator */}
                             {detail.correctOptions && detail.correctOptions.length > 1 && (
                               <div className="text-xs text-blue-600 mb-2">
                                 📋 Multiple Choice Question (select all correct answers)
@@ -371,16 +378,13 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                               }`}>
                                 <span className="font-medium">Student Answer:</span>
                                 <span>
-                                  {/* ✅ FIXED: Handle both single and multiple selections */}
                                   {Array.isArray(detail.studentAnswer) ? (
-                                    // Multiple selections
                                     detail.studentAnswer.length > 0 ? 
                                       detail.studentAnswer.map(answerIndex => 
                                         assignment.questions[detail.questionKey]?.options[answerIndex] || `Option ${answerIndex + 1}`
                                       ).join(', ') : 
                                       'No selection'
                                   ) : (
-                                    // Single selection
                                     detail.studentAnswer !== undefined && detail.studentAnswer !== -1 
                                       ? assignment.questions[detail.questionKey]?.options[detail.studentAnswer] || `Option ${detail.studentAnswer + 1}`
                                       : 'No answer'
@@ -402,19 +406,15 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                           </div>
                         ))
                       ) : (
-                        /* ✅ UPDATED: Fallback calculation with multiple choice support */
                         Object.entries(assignment.questions).map(([questionKey, question], qIndex) => {
                           const userAnswer = response.userAssignmentResponse[qIndex];
                           
-                          // Calculate if correct based on question type
                           let isCorrect = false;
                           if (question.correctOptions && Array.isArray(question.correctOptions)) {
                             if (question.correctOptions.length === 1) {
-                              // Single choice
                               const studentChoice = Array.isArray(userAnswer) ? userAnswer[0] : userAnswer;
                               isCorrect = studentChoice === question.correctOptions[0];
                             } else {
-                              // Multiple choice
                               const studentSelections = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
                               const hasAllCorrect = question.correctOptions.every(correctOption => 
                                 studentSelections.includes(correctOption)
@@ -432,7 +432,6 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                                 <span className="text-teal-700">Question {qIndex + 1}:</span> {question.question}
                               </div>
                               
-                              {/* ✅ ADDED: Multiple choice indicator for fallback */}
                               {question.correctOptions && question.correctOptions.length > 1 && (
                                 <div className="text-xs text-blue-600 mb-2">
                                   📋 Multiple Choice Question (select all correct answers)
@@ -445,16 +444,13 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                                 }`}>
                                   <span className="font-medium">Student Answer:</span>
                                   <span>
-                                    {/* ✅ FIXED: Handle both single and multiple for fallback */}
                                     {Array.isArray(userAnswer) ? (
-                                      // Multiple selections
                                       userAnswer.length > 0 ? 
                                         userAnswer.map(answerIndex => 
                                           question.options[answerIndex] || `Option ${answerIndex + 1}`
                                         ).join(', ') : 
                                         'No selection'
                                     ) : (
-                                      // Single selection
                                       userAnswer !== undefined && userAnswer !== -1 
                                         ? question.options[userAnswer] || `Option ${userAnswer + 1}`
                                         : 'No answer'

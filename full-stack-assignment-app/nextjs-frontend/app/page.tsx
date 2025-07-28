@@ -10,7 +10,6 @@ import { StudentGradesDetail } from '@/components/StudentGradesDetail';
 import { useUser } from '@/contexts/UserContext';
 import { X, Pencil, Eye, Play, User, BarChart3, GraduationCap, Users, Award } from 'lucide-react';
 
-// Import types for compatibility
 import { Assignment, CleanAssignment, cleanToComponentAssignment, verifyStudentDataSecurity } from '@/types';
 
 export default function Home() {
@@ -30,7 +29,6 @@ export default function Home() {
   const [studentId, setStudentId] = useState('');
   const [userMode, setUserMode] = useState<'teacher' | 'student'>('teacher');
 
-  // Listen for global modal-close event
   useEffect(() => {
     const handleCloseAssignmentModal = () => {
       setShowCreateModal(false);
@@ -63,7 +61,7 @@ export default function Home() {
 
     const handleViewStudentResults = (event: any) => {
       const assignment = event.detail;
-      console.log('Opening results for assignment:', assignment);
+      // console.log('Opening results for assignment:', assignment);
       setSelectedAssignment(assignment);
       setShowAssignmentManager(false);
       setShowStudentResults(true);
@@ -97,7 +95,6 @@ export default function Home() {
     };
   }, []);
 
-  // ⭐ NEW: Security verification function
   const verifyDataSecurity = (assignment: Assignment, userMode: 'teacher' | 'student') => {
     if (userMode === 'student') {
       return verifyStudentDataSecurity(assignment);
@@ -105,32 +102,29 @@ export default function Home() {
     return true;
   };
 
-  // ⭐ UPDATED: Fetch assignments with security parameters
   const fetchAssignments = async () => {
     setLoading(true);
-    console.log('🔍 FRONTEND DEBUG: Starting to fetch assignments...');
-    console.log('🔍 Using userId:', userId);
-    console.log('🔍 User mode:', userMode);
+    // console.log('Starting to fetch assignments...');
+    // console.log('Using userId:', userId);
+    // console.log('User mode:', userMode);
     
     try {
-      // ⭐ NEW: Include user role and security parameters in request
       const url = userMode === 'teacher' 
         ? `/api/assignments?userId=${userId}&requestingUserId=${userId}&userRole=teacher`
         : `/api/assignments?requestingUserId=${userId}&userRole=student`;
       
-      console.log('🔍 Fetching from URL:', url);
+      // console.log('Fetching from URL:', url);
       
       const response = await fetch(url);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Assignments fetched successfully:', data);
+        // console.log('Assignments fetched successfully:', data);
         
         if (data.assignments && Array.isArray(data.assignments)) {
-          console.log(`✅ Found ${data.assignments.length} assignments`);
-          console.log('🔍 Data type received:', data.dataType); // ⭐ NEW: Shows if data is clean or complete
+          // console.log(`Found ${data.assignments.length} assignments`);
+          // console.log('Data type received:', data.dataType);
           
-          // ⭐ NEW: Convert clean assignments to component-compatible format if needed
           let processedAssignments: Assignment[] = data.assignments;
           
           if (data.dataType === 'student-safe') {
@@ -140,94 +134,85 @@ export default function Home() {
           }
           
           processedAssignments.forEach((assignment: Assignment) => {
-            console.log(`📄 Assignment ID: ${assignment.assignmentId}, Title: "${assignment.title}", Owner: ${assignment.assignmentOwnerId}`);
+            // console.log(`Assignment ID: ${assignment.assignmentId}, Title: "${assignment.title}", Owner: ${assignment.assignmentOwnerId}`);
             
-            // ⭐ NEW: Security verification - ensure correct answers are not present in student data
             if (userMode === 'student') {
               if (!verifyDataSecurity(assignment, 'student')) {
                 alert('Security Error: Please contact administrator');
               } else {
-                console.log('✅ Student data is secure - no correct answers exposed');
+                // console.log('Student data is secure - no correct answers exposed');
               }
             } else {
-              console.log('📚 Teacher data includes complete assignment information');
+              // console.log('Teacher data includes complete assignment information');
             }
           });
           
           setAssignments(processedAssignments);
         } else {
-          console.log('❌ NO ASSIGNMENTS RETURNED from API');
+          // console.log('No assignments returned from API');
           setAssignments([]);
         }
         
-        // Check for debug info from backend
         if (data.debug) {
-          console.log('🔍 Debug info from backend:', data.debug);
+          // console.log('Debug info from backend:', data.debug);
         }
       } else {
-        console.error('❌ API response not ok:', response.status, response.statusText);
+        // console.error('API response not ok:', response.status, response.statusText);
         const errorText = await response.text();
-        console.error('❌ Error response body:', errorText);
+        // console.error('Error response body:', errorText);
         setAssignments([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching assignments:', error);
+      // console.error('Error fetching assignments:', error);
       setAssignments([]);
     } finally {
       setLoading(false);
-      console.log('🔍 Finished fetching assignments');
+      // console.log('Finished fetching assignments');
     }
   };
 
-  // Handle view assignments
   const handleViewAssignments = () => {
     setShowViewModal(true);
     fetchAssignments();
   };
 
-  // Handle edit assignment (teacher only)
   const handleEditAssignment = (assignment: Assignment) => {
     setEditingAssignment(assignment);
     setShowAssignmentManager(false);
     setShowCreateModal(true);
   };
 
-  // ⭐ UPDATED: Handle take assignment with security checks
   const handleTakeAssignment = (assignment: Assignment) => {
     if (!studentId.trim()) {
       alert('Please enter your Student ID first');
       return;
     }
     
-    // ⭐ NEW: Verify assignment data is secure before opening
     if (!verifyDataSecurity(assignment, 'student')) {
       alert('Security Error: Cannot open assignment. Please contact administrator.');
       return;
     }
     
-    console.log('✅ Assignment security verified - opening for student');
+    // console.log('Assignment security verified - opening for student');
     setSelectedAssignment(assignment);
     setShowViewModal(false);
     setShowAssignmentViewer(true);
   };
 
-  // Handle view student results (teacher only)
   const handleViewStudentResults = (assignment: Assignment) => {
-    console.log('Opening results for assignment:', assignment);
-    console.log('Assignment questions:', assignment.questions);
+    // console.log('Opening results for assignment:', assignment);
+    // console.log('Assignment questions:', assignment.questions);
     setSelectedAssignment(assignment);
     setShowAssignmentManager(false);
     setShowStudentResults(true);
   };
 
-  // Handle view student grades detail
   const handleViewStudentGrades = (studentId: string) => {
     setSelectedStudentId(studentId);
     setShowGradesManager(false);
     setShowStudentGradesDetail(true);
   };
 
-  // Calculate total points for an assignment
   const getTotalPoints = (questions: { [key: string]: any } | undefined | null): number => {
     if (!questions || typeof questions !== 'object') {
       return 0;
@@ -239,7 +224,6 @@ export default function Home() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-      {/* Mode Toggle */}
       <div className="mb-6 p-4 bg-white rounded-lg shadow-md">
         <div className="flex items-center gap-4">
           <span className="text-gray-700 font-medium">Mode:</span>
@@ -269,7 +253,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Student ID Input */}
         {userMode === 'student' && (
           <div className="mt-4 flex items-center gap-3">
             <User className="h-5 w-5 text-gray-600" />
@@ -283,14 +266,12 @@ export default function Home() {
           </div>
         )}
 
-        {/* Current User Info */}
         <div className="mt-4 text-sm text-gray-600">
           <div>Current User ID: {userId}</div>
           <div>Assignment Owner ID: {assignmentOwnerId}</div>
         </div>
       </div>
 
-      {/* Main Buttons */}
       <div className="flex gap-4 mb-4 flex-wrap justify-center">
         {userMode === 'teacher' && (
           <>
@@ -330,7 +311,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Create Assignment Modal - Full Screen */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-start justify-center p-4 min-h-screen">
@@ -357,7 +337,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Assignment Manager Modal */}
       {showAssignmentManager && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -370,7 +349,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Grades Manager Modal */}
       {showGradesManager && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -383,7 +361,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Student Grades Detail Modal */}
       {showStudentGradesDetail && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -396,7 +373,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* View Assignments Modal (Student Mode) */}
       {showViewModal && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -468,7 +444,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Assignment Viewer Modal (Student taking assignment) */}
       {showAssignmentViewer && selectedAssignment && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -484,7 +459,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Student Results Viewer Modal */}
       {showStudentResults && selectedAssignment && (
         <div className="fixed inset-0 z-50 bg-black bg-opacity-50">
           <div className="absolute inset-0 flex items-center justify-center p-4">

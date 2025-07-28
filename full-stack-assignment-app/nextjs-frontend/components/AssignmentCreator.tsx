@@ -7,7 +7,6 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { KaTeXHelp } from "@/components/KaTeXHelp";
 
-// KaTeX Renderer Component (React 19 compatible replacement for MathJax)
 const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({ 
   children, 
   className = '' 
@@ -22,7 +21,6 @@ const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({
         if (children.includes('$') || children.includes('\\')) {
           let processedContent = children;
           
-          // Replace display math ($$...$$)
           processedContent = processedContent.replace(/\$\$(.*?)\$\$/g, (match, math) => {
             try {
               return katex.renderToString(math, { displayMode: true });
@@ -31,7 +29,6 @@ const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({
             }
           });
           
-          // Replace inline math ($...$)
           processedContent = processedContent.replace(/\$([^$]*?)\$/g, (match, math) => {
             try {
               return katex.renderToString(math, { displayMode: false });
@@ -45,7 +42,7 @@ const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({
           ref.current.textContent = children;
         }
       } catch (error) {
-        console.error('KaTeX rendering error:', error);
+        // console.error('KaTeX rendering error:', error);
         if (ref.current) {
           ref.current.innerHTML = `<span style="color: red;">Render Error: ${children}</span>`;
         }
@@ -71,14 +68,12 @@ type QuestionData = {
   points: number;
 };
 
-// JSON structure for API
 interface AssignmentQuestion {
   question: string;
   options: string[];
   correctOptions: number[];
   explanation: string;
   points: number;
-  // Legacy support - might exist in older data
   correctAnswers?: number[];
 }
 
@@ -101,7 +96,6 @@ const defaultQuestion = (): QuestionData => ({
   points: 1,
 });
 
-// Types for editing
 interface Assignment {
   userId: string;
   assignmentId: string;
@@ -127,34 +121,29 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isGradedForPoints, setIsGradedForPoints] = useState<boolean>(true);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState<boolean>(true);
-  // ✅ NEW: Settings UI state
   const [activeSettingsTab, setActiveSettingsTab] = useState<'basic' | 'advanced'>('basic');
 
-  // Load assignment data when editing
   useEffect(() => {
     if (editingAssignment) {
-      console.log('🔍 Loading assignment for editing:', editingAssignment);
+      // console.log('Loading assignment for editing:', editingAssignment);
       setIsEditing(true);
       setAssignmentTitle(editingAssignment.title);
       
-      // Load assignment settings
       setIsGradedForPoints((editingAssignment as any).isGradedForPoints ?? true);
       setShowCorrectAnswers((editingAssignment as any).showCorrectAnswers ?? true);
       
-      // Convert API format back to form format
       const formQuestions: QuestionData[] = [];
       const optionCounts: number[] = [];
       
       Object.entries(editingAssignment.questions).forEach(([key, question]) => {
-        console.log(`🔍 Processing question ${key}:`, question);
+        // console.log(`Processing question ${key}:`, question);
         
-        // 🔍 FIX: Get correct answers from the assignment-level correctAnswers field
         const assignmentCorrectAnswers = (editingAssignment as any).correctAnswers;
         const correctOptions = assignmentCorrectAnswers && assignmentCorrectAnswers[key] 
           ? assignmentCorrectAnswers[key].correctOptions || []
           : [];
         
-        console.log(`🔍 Correct options for question ${key}:`, correctOptions);
+        // console.log(`Correct options for question ${key}:`, correctOptions);
         
         const formQuestion: QuestionData = {
           question: question.question || "",
@@ -171,23 +160,22 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           points: question.points || 1,
         };
         
-        console.log(`🔍 Form question ${key} created:`, {
-          correctAnswers: formQuestion.correctAnswers,
-          correctCount: formQuestion.correctCount,
-          options: formQuestion.options.length
-        });
+        // console.log(`Form question ${key} created:`, {
+        //   correctAnswers: formQuestion.correctAnswers,
+        //   correctCount: formQuestion.correctCount,
+        //   options: formQuestion.options.length
+        // });
         
         formQuestions.push(formQuestion);
         optionCounts.push(question.options?.length || 0);
       });
       
-      console.log('🔍 Final form questions:', formQuestions);
+      // console.log('Final form questions:', formQuestions);
       setQuestions(formQuestions);
       setNumOptions(optionCounts);
     }
   }, [editingAssignment]);
 
-  // Validation constants
   const MAX_QUESTION_LENGTH = 1000;
   const MAX_OPTION_LENGTH = 500;
   const MAX_QUESTIONS = 100;
@@ -226,7 +214,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     setNumOptions((prev) => [...prev, 0]);
   };
 
-  // ✅ NEW: Question reordering functions
   const moveQuestion = (fromIndex: number, direction: 'up' | 'down') => {
     const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
     
@@ -235,7 +222,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     const newQuestions = [...questions];
     const newNumOptions = [...numOptions];
     
-    // Swap questions
     [newQuestions[fromIndex], newQuestions[toIndex]] = [newQuestions[toIndex], newQuestions[fromIndex]];
     [newNumOptions[fromIndex], newNumOptions[toIndex]] = [newNumOptions[toIndex], newNumOptions[fromIndex]];
     
@@ -243,7 +229,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     setNumOptions(newNumOptions);
   };
 
-  // ✅ NEW: Question deletion function
   const handleDeleteQuestion = (qIndex: number) => {
     if (questions.length <= 1) {
       alert("You must have at least one question.");
@@ -260,7 +245,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     setNumOptions(newNumOptions);
   };
 
-  // ✅ NEW: Bulk operations for options
   const selectAllOptions = (qIndex: number) => {
     const optionCount = questions[qIndex].options.length;
     const allIndices = Array.from({ length: optionCount }, (_, i) => i);
@@ -283,10 +267,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     
     let newCorrectAnswers;
     if (isCurrentlyCorrect) {
-      // Remove from correct answers
       newCorrectAnswers = currentCorrect.filter(idx => idx !== optionIndex);
     } else {
-      // Add to correct answers
       newCorrectAnswers = [...currentCorrect, optionIndex];
     }
     
@@ -296,19 +278,16 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     });
   };
 
-  // Convert form data to JSON format
   const convertToAssignmentJSON = (questions: QuestionData[]): AssignmentData => {
     const assignmentData: AssignmentData = {};
     
     questions.forEach((question, index) => {
-      // Only include questions that have content
       if (question.question.trim() && question.options.length > 0) {
         const questionKey = (index + 1).toString();
         
         assignmentData[questionKey] = {
           question: question.question.trim(),
           options: question.options.filter(opt => opt.trim() !== ''),
-          // ✅ FIXED: Don't filter out index 0, just use the array as-is
           correctOptions: question.correctAnswers,
           explanation: question.explanation.trim(),
           points: question.points
@@ -319,7 +298,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     return assignmentData;
   };
 
-  // Enhanced validation function
   const isAssignmentValid = (): boolean => {
     if (!assignmentTitle.trim()) return false;
     
@@ -328,12 +306,10 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
              q.question.length <= MAX_QUESTION_LENGTH &&
              q.options.length > 0 && 
              q.options.some(opt => opt.trim() !== '' && opt.length <= MAX_OPTION_LENGTH) &&
-             // ✅ FIXED: Check if any correct answers are selected
              q.correctAnswers.length > 0;
     });
   };
 
-  // ✅ NEW: Helper function for validation messages
   const getValidationMessage = (q: QuestionData): string => {
     if (!q.question.trim()) return "Question text is required";
     if (q.options.length === 0) return "Add answer choices";
@@ -342,12 +318,11 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     return "";
   };
 
-  // ✅ NEW: Assignment statistics
   const getAssignmentStats = () => {
     const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
     const multipleChoiceCount = questions.filter(q => q.correctAnswers.length > 1).length;
     const singleChoiceCount = questions.length - multipleChoiceCount;
-    const estimatedTime = Math.ceil(questions.length * 1.5); // 1.5 minutes per question estimate
+    const estimatedTime = Math.ceil(questions.length * 1.5);
     
     return {
       totalQuestions: questions.length,
@@ -358,7 +333,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     };
   };
 
-  // Save assignment to API
   const saveAssignmentToAPI = async (assignmentData: AssignmentData) => {
     try {
       const payload = {
@@ -374,7 +348,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
         showCorrectAnswers: showCorrectAnswers
       };
 
-      // Add assignment ID if editing
       if (isEditing && editingAssignment) {
         (payload as any).assignmentId = editingAssignment.assignmentId;
       }
@@ -398,15 +371,12 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     }
   };
 
-  // Handle save assignment with validation
   const handleSaveAssignment = async () => {
-    // Check question limits
     if (questions.length > MAX_QUESTIONS) {
       alert(`Maximum ${MAX_QUESTIONS} questions allowed.`);
       return;
     }
 
-    // Check question length limits
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       if (q.question.length > MAX_QUESTION_LENGTH) {
@@ -436,7 +406,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
       const action = isEditing ? 'updated' : 'saved';
       alert(`Assignment "${assignmentTitle}" ${action} successfully! ID: ${result.assignmentId || result.id}`);
       
-      // Close the modal
       window.dispatchEvent(new Event("close-assignment-modal"));
     } catch (error) {
       alert('Failed to save assignment. Please try again.');
@@ -452,7 +421,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white w-full h-full flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="border-b bg-white p-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-teal-800">
@@ -471,10 +439,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           </div>
         </div>
 
-        {/* Content Area - Full Height with Scroll */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
           <div className="max-w-4xl mx-auto">
-            {/* Assignment Title */}
             <div className="mb-6 p-4 bg-blue-50 rounded-md border border-slate-600/30">
               <label className="block text-teal-800 font-medium mb-2">
                 Assignment Title *
@@ -489,14 +455,12 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               />
             </div>
 
-            {/* Assignment Settings */}
             <div className="mb-6 p-4 bg-teal-50 rounded-md border border-teal-200">
               <div className="flex items-center gap-2 mb-3">
                 <Settings className="h-5 w-5 text-teal-600" />
                 <h3 className="text-teal-800 font-medium">Assignment Settings</h3>
               </div>
               
-              {/* ✅ NEW: Tabbed Settings Interface */}
               <div className="mb-4">
                 <div className="flex border-b border-teal-200">
                   <button
@@ -522,10 +486,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                 </div>
               </div>
 
-              {/* Basic Settings Tab */}
               {activeSettingsTab === 'basic' && (
                 <div className="space-y-3">
-                  {/* Grading Option */}
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
@@ -546,10 +508,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                 </div>
               )}
 
-              {/* Advanced Settings Tab */}
               {activeSettingsTab === 'advanced' && (
                 <div className="space-y-3">
-                  {/* Show Correct Answers Option */}
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
@@ -571,7 +531,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               )}
             </div>
 
-            {/* ✅ NEW: Assignment Statistics */}
             {(() => {
               const stats = getAssignmentStats();
               return (
@@ -606,25 +565,21 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
               );
             })()}
 
-            {/* Questions */}
             {questions.map((q, qIndex) => (
               <div
                 key={qIndex}
                 className="space-y-4 border border-gray-200 p-4 rounded-md bg-white shadow-sm mb-6"
               >
-                {/* ✅ UPDATED: Question Header with Controls */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
                     
-                    {/* ✅ NEW: Enhanced Multiple Choice Indicator */}
                     {q.correctAnswers.length > 1 && (
                       <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
                         📋 Multiple Choice ({q.correctAnswers.length} correct)
                       </span>
                     )}
                     
-                    {/* ✅ NEW: Validation Warning */}
                     {getValidationMessage(q) && (
                       <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
                         ⚠️ {getValidationMessage(q)}
@@ -633,7 +588,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* ✅ NEW: Question Reordering Controls */}
                     <button
                       onClick={() => moveQuestion(qIndex, 'up')}
                       disabled={qIndex === 0}
@@ -659,7 +613,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                       <ArrowDown className="h-4 w-4" />
                     </button>
 
-                    {/* ✅ NEW: Question Deletion */}
                     {questions.length > 1 && (
                       <button
                         onClick={() => handleDeleteQuestion(qIndex)}
@@ -670,7 +623,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                       </button>
                     )}
 
-                    {/* Points Input */}
                     {isGradedForPoints && (
                       <div className="flex items-center gap-2">
                         <input
@@ -690,7 +642,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   </div>
                 </div>
 
-                {/* Question Input */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-teal-800 font-medium">Question Text *</label>
@@ -743,7 +694,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                     )}
                   </div>
                   
-                  {/* Question Preview */}
                   {q.showQuestionPreview && q.question && (
                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
                       <div className="text-xs text-blue-800 font-medium mb-2">LaTeX Preview:</div>
@@ -752,7 +702,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   )}
                 </div>
 
-                {/* Number of Options */}
                 <div className="flex items-center gap-4">
                   <label className="text-teal-800 font-medium">
                     Number of choices:
@@ -771,7 +720,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   </select>
                 </div>
 
-                {/* Correct Answer Instructions */}
                 {q.options.length > 0 && (
                   <div className="p-3 bg-teal-50 border border-teal-200 rounded-md">
                     <div className="flex items-center justify-between">
@@ -779,7 +727,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                         ✓ Check the boxes next to the correct answer(s)
                       </p>
                       
-                      {/* ✅ NEW: Bulk Operations */}
                       {q.options.length > 1 && (
                         <div className="flex items-center gap-2">
                           <button
@@ -800,10 +747,9 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   </div>
                 )}
 
-                {/* Options with Checkboxes */}
                 {q.options.map((opt, i) => {
                   const isChecked = q.correctAnswers.includes(i);
-                  console.log(`🔍 Question ${qIndex}, Option ${i}: checked=${isChecked}, correctAnswers=${JSON.stringify(q.correctAnswers)}`);
+                  // console.log(`Question ${qIndex}, Option ${i}: checked=${isChecked}, correctAnswers=${JSON.stringify(q.correctAnswers)}`);
                   
                   return (
                     <div key={i} className="space-y-2">
@@ -828,7 +774,7 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {
-                            console.log(`🔍 Checkbox clicked for question ${qIndex}, option ${i}`);
+                            // console.log(`Checkbox clicked for question ${qIndex}, option ${i}`);
                             handleCorrectAnswerToggle(qIndex, i);
                           }}
                           className="w-5 h-5 text-teal-600 rounded focus:ring-teal-500"
@@ -855,7 +801,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                         {opt.length}/{MAX_OPTION_LENGTH} characters
                       </div>
                       
-                      {/* Option Preview */}
                       {q.showOptionPreviews?.[i] && opt && (
                         <div className="p-2 bg-blue-50 border border-blue-200 rounded-md ml-8">
                           <div className="text-xs text-blue-800 font-medium mb-1">LaTeX Preview:</div>
@@ -866,7 +811,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   );
                 })}
 
-                {/* Save/Edit Buttons for Options with Enhanced Feedback */}
                 {q.options.length > 0 && (
                   <div className="flex items-center justify-between mt-4">
                     <div className="flex flex-col">
@@ -911,7 +855,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   </div>
                 )}
 
-                {/* Explanation */}
                 <div>
                   {!q.showExplanation ? (
                     <button
@@ -944,12 +887,11 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                       <textarea
                         value={q.explanation}
                         onChange={(e) => updateQuestion(qIndex, { explanation: e.target.value })}
-                        placeholder="Enter explanation (supports LaTeX: $x^2$ for inline, $$x^2$$ for display)"
+                        placeholder="Enter explanation (supports LaTeX: $x^2$ for inline, $x^2$ for display)"
                         className="w-full p-2 border rounded-md text-gray-900"
                         rows={3}
                       />
                       
-                      {/* Explanation Preview */}
                       {q.showExplanationPreview && q.explanation && (
                         <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
                           <div className="text-xs text-blue-800 font-medium mb-2">LaTeX Preview:</div>
@@ -964,7 +906,6 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
           </div>
         </div>
 
-        {/* Fixed Footer with Buttons */}
         <div className="border-t bg-white p-4 flex-shrink-0">
           <div className="max-w-4xl mx-auto flex justify-between gap-4">
             <button
