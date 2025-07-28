@@ -67,18 +67,26 @@ export const handler = async (event) => {
         const correctAnswers = {};
         
         Object.entries(questions).forEach(([key, question]) => {
+            // Determine question type based on correct options count
+            const correctOptionsArray = question.correctOptions || [];
+            const questionType = correctOptionsArray.length > 1 ? 'multiple' : 'single';
+            
             // Store clean question data (no correct answers)
             cleanQuestions[key] = {
                 question: question.question,
                 options: question.options,
                 explanation: question.explanation,
-                points: question.points || 1
+                points: question.points || 1,
+                questionType: questionType  // ⭐ NEW: Add question type
             };
             
-            // Store correct answers separately
+            // Store correct answers separately with type information
             correctAnswers[key] = {
-                correctOptions: question.correctOptions || []
+                correctOptions: correctOptionsArray,
+                questionType: questionType  // ⭐ NEW: Add question type for grading
             };
+            
+            console.log(`Question ${key}: type=${questionType}, correctOptions=${correctOptionsArray.length}`);
         });
 
         // ⭐ UPDATED: Create assignment item with new settings

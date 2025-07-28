@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Check, Pencil, Eye, X, FileText, Send } from "lucide-react";
+import { Check, Pencil, Eye, X, FileText, Send, ArrowUp, ArrowDown, Trash2, Users, Settings } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -127,6 +127,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isGradedForPoints, setIsGradedForPoints] = useState<boolean>(true);
   const [showCorrectAnswers, setShowCorrectAnswers] = useState<boolean>(true);
+  // ✅ NEW: Settings UI state
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'basic' | 'advanced'>('basic');
 
   // Load assignment data when editing
   useEffect(() => {
@@ -224,6 +226,57 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
     setNumOptions((prev) => [...prev, 0]);
   };
 
+  // ✅ NEW: Question reordering functions
+  const moveQuestion = (fromIndex: number, direction: 'up' | 'down') => {
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    
+    if (toIndex < 0 || toIndex >= questions.length) return;
+    
+    const newQuestions = [...questions];
+    const newNumOptions = [...numOptions];
+    
+    // Swap questions
+    [newQuestions[fromIndex], newQuestions[toIndex]] = [newQuestions[toIndex], newQuestions[fromIndex]];
+    [newNumOptions[fromIndex], newNumOptions[toIndex]] = [newNumOptions[toIndex], newNumOptions[fromIndex]];
+    
+    setQuestions(newQuestions);
+    setNumOptions(newNumOptions);
+  };
+
+  // ✅ NEW: Question deletion function
+  const handleDeleteQuestion = (qIndex: number) => {
+    if (questions.length <= 1) {
+      alert("You must have at least one question.");
+      return;
+    }
+    
+    const confirmDelete = confirm(`Are you sure you want to delete Question ${qIndex + 1}?`);
+    if (!confirmDelete) return;
+    
+    const newQuestions = questions.filter((_, index) => index !== qIndex);
+    const newNumOptions = numOptions.filter((_, index) => index !== qIndex);
+    
+    setQuestions(newQuestions);
+    setNumOptions(newNumOptions);
+  };
+
+  // ✅ NEW: Bulk operations for options
+  const selectAllOptions = (qIndex: number) => {
+    const optionCount = questions[qIndex].options.length;
+    const allIndices = Array.from({ length: optionCount }, (_, i) => i);
+    updateQuestion(qIndex, { 
+      correctAnswers: allIndices,
+      correctCount: allIndices.length
+    });
+  };
+
+  const clearAllOptions = (qIndex: number) => {
+    updateQuestion(qIndex, { 
+      correctAnswers: [],
+      correctCount: 0
+    });
+  };
+
   const handleCorrectAnswerToggle = (qIndex: number, optionIndex: number) => {
     const currentCorrect = questions[qIndex].correctAnswers;
     const isCurrentlyCorrect = currentCorrect.includes(optionIndex);
@@ -255,7 +308,8 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
         assignmentData[questionKey] = {
           question: question.question.trim(),
           options: question.options.filter(opt => opt.trim() !== ''),
-          correctOptions: question.correctAnswers.filter(answer => answer !== -1),
+          // ✅ FIXED: Don't filter out index 0, just use the array as-is
+          correctOptions: question.correctAnswers,
           explanation: question.explanation.trim(),
           points: question.points
         };
@@ -274,8 +328,34 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
              q.question.length <= MAX_QUESTION_LENGTH &&
              q.options.length > 0 && 
              q.options.some(opt => opt.trim() !== '' && opt.length <= MAX_OPTION_LENGTH) &&
-             q.correctAnswers.some(answer => answer !== -1);
+             // ✅ FIXED: Check if any correct answers are selected
+             q.correctAnswers.length > 0;
     });
+  };
+
+  // ✅ NEW: Helper function for validation messages
+  const getValidationMessage = (q: QuestionData): string => {
+    if (!q.question.trim()) return "Question text is required";
+    if (q.options.length === 0) return "Add answer choices";
+    if (q.options.every(opt => !opt.trim())) return "Fill in answer choices";
+    if (q.correctAnswers.length === 0) return "Select at least one correct answer";
+    return "";
+  };
+
+  // ✅ NEW: Assignment statistics
+  const getAssignmentStats = () => {
+    const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+    const multipleChoiceCount = questions.filter(q => q.correctAnswers.length > 1).length;
+    const singleChoiceCount = questions.length - multipleChoiceCount;
+    const estimatedTime = Math.ceil(questions.length * 1.5); // 1.5 minutes per question estimate
+    
+    return {
+      totalQuestions: questions.length,
+      totalPoints,
+      multipleChoiceCount,
+      singleChoiceCount,
+      estimatedTime
+    };
   };
 
   // Save assignment to API
@@ -411,48 +491,120 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
 
             {/* Assignment Settings */}
             <div className="mb-6 p-4 bg-teal-50 rounded-md border border-teal-200">
-              <h3 className="text-teal-800 font-medium mb-3">Assignment Settings</h3>
-              
-              <div className="space-y-3">
-                {/* Grading Option */}
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="gradedForPoints"
-                    checked={isGradedForPoints}
-                    onChange={(e) => setIsGradedForPoints(e.target.checked)}
-                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
-                  />
-                  <label htmlFor="gradedForPoints" className="text-teal-800 font-medium">
-                    Grade this assignment for points
-                  </label>
-                </div>
-                {!isGradedForPoints && (
-                  <div className="ml-7 text-sm text-teal-600">
-                    Students will see completion status only, no scores or grades
-                  </div>
-                )}
-
-                {/* Show Correct Answers Option */}
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="showCorrectAnswers"
-                    checked={showCorrectAnswers}
-                    onChange={(e) => setShowCorrectAnswers(e.target.checked)}
-                    className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
-                  />
-                  <label htmlFor="showCorrectAnswers" className="text-teal-800 font-medium">
-                    Show correct answers to students after submission
-                  </label>
-                </div>
-                {!showCorrectAnswers && (
-                  <div className="ml-7 text-sm text-teal-600">
-                    Students will only see if they got questions right/wrong, not which answers were correct
-                  </div>
-                )}
+              <div className="flex items-center gap-2 mb-3">
+                <Settings className="h-5 w-5 text-teal-600" />
+                <h3 className="text-teal-800 font-medium">Assignment Settings</h3>
               </div>
+              
+              {/* ✅ NEW: Tabbed Settings Interface */}
+              <div className="mb-4">
+                <div className="flex border-b border-teal-200">
+                  <button
+                    onClick={() => setActiveSettingsTab('basic')}
+                    className={`px-4 py-2 text-sm font-medium ${
+                      activeSettingsTab === 'basic'
+                        ? 'border-b-2 border-teal-500 text-teal-700'
+                        : 'text-teal-600 hover:text-teal-700'
+                    }`}
+                  >
+                    Basic Settings
+                  </button>
+                  <button
+                    onClick={() => setActiveSettingsTab('advanced')}
+                    className={`px-4 py-2 text-sm font-medium ${
+                      activeSettingsTab === 'advanced'
+                        ? 'border-b-2 border-teal-500 text-teal-700'
+                        : 'text-teal-600 hover:text-teal-700'
+                    }`}
+                  >
+                    Advanced Options
+                  </button>
+                </div>
+              </div>
+
+              {/* Basic Settings Tab */}
+              {activeSettingsTab === 'basic' && (
+                <div className="space-y-3">
+                  {/* Grading Option */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="gradedForPoints"
+                      checked={isGradedForPoints}
+                      onChange={(e) => setIsGradedForPoints(e.target.checked)}
+                      className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                    />
+                    <label htmlFor="gradedForPoints" className="text-teal-800 font-medium">
+                      Grade this assignment for points
+                    </label>
+                  </div>
+                  {!isGradedForPoints && (
+                    <div className="ml-7 text-sm text-teal-600">
+                      Students will see completion status only, no scores or grades
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Advanced Settings Tab */}
+              {activeSettingsTab === 'advanced' && (
+                <div className="space-y-3">
+                  {/* Show Correct Answers Option */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="showCorrectAnswers"
+                      checked={showCorrectAnswers}
+                      onChange={(e) => setShowCorrectAnswers(e.target.checked)}
+                      className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                    />
+                    <label htmlFor="showCorrectAnswers" className="text-teal-800 font-medium">
+                      Show correct answers to students after submission
+                    </label>
+                  </div>
+                  {!showCorrectAnswers && (
+                    <div className="ml-7 text-sm text-teal-600">
+                      Students will only see if they got questions right/wrong, not which answers were correct
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
+            {/* ✅ NEW: Assignment Statistics */}
+            {(() => {
+              const stats = getAssignmentStats();
+              return (
+                <div className="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users className="h-5 w-5 text-gray-600" />
+                    <h3 className="text-gray-800 font-medium">Assignment Overview</h3>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <div className="font-medium text-gray-700">Questions</div>
+                      <div className="text-gray-600">{stats.totalQuestions}</div>
+                    </div>
+                    {isGradedForPoints && (
+                      <div>
+                        <div className="font-medium text-gray-700">Total Points</div>
+                        <div className="text-gray-600">{stats.totalPoints}</div>
+                      </div>
+                    )}
+                    <div>
+                      <div className="font-medium text-gray-700">Question Types</div>
+                      <div className="text-gray-600">
+                        {stats.singleChoiceCount} Single, {stats.multipleChoiceCount} Multiple
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-700">Est. Time</div>
+                      <div className="text-gray-600">{stats.estimatedTime} min</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Questions */}
             {questions.map((q, qIndex) => (
@@ -460,25 +612,82 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                 key={qIndex}
                 className="space-y-4 border border-gray-200 p-4 rounded-md bg-white shadow-sm mb-6"
               >
-                {/* Question Header with Points */}
+                {/* ✅ UPDATED: Question Header with Controls */}
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
-                  {isGradedForPoints && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={q.points}
-                        onChange={(e) => updateQuestion(qIndex, { points: parseInt(e.target.value) || 1 })}
-                        className="w-16 p-2 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500 text-center"
-                      />
-                      <span className="text-gray-600 text-sm">pts</span>
-                    </div>
-                  )}
-                  {!isGradedForPoints && (
-                    <span className="text-sm text-gray-500 italic">Not graded</span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-semibold text-teal-800">Question {qIndex + 1}</h2>
+                    
+                    {/* ✅ NEW: Enhanced Multiple Choice Indicator */}
+                    {q.correctAnswers.length > 1 && (
+                      <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                        📋 Multiple Choice ({q.correctAnswers.length} correct)
+                      </span>
+                    )}
+                    
+                    {/* ✅ NEW: Validation Warning */}
+                    {getValidationMessage(q) && (
+                      <span className="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs font-medium rounded-full">
+                        ⚠️ {getValidationMessage(q)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* ✅ NEW: Question Reordering Controls */}
+                    <button
+                      onClick={() => moveQuestion(qIndex, 'up')}
+                      disabled={qIndex === 0}
+                      className={`p-1 rounded ${
+                        qIndex === 0
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                      }`}
+                      title="Move Up"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => moveQuestion(qIndex, 'down')}
+                      disabled={qIndex === questions.length - 1}
+                      className={`p-1 rounded ${
+                        qIndex === questions.length - 1
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                      }`}
+                      title="Move Down"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+
+                    {/* ✅ NEW: Question Deletion */}
+                    {questions.length > 1 && (
+                      <button
+                        onClick={() => handleDeleteQuestion(qIndex)}
+                        className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                        title="Delete Question"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+
+                    {/* Points Input */}
+                    {isGradedForPoints && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={q.points}
+                          onChange={(e) => updateQuestion(qIndex, { points: parseInt(e.target.value) || 1 })}
+                          className="w-16 p-2 border rounded-md text-gray-800 focus:ring-2 focus:ring-teal-500 text-center"
+                        />
+                        <span className="text-gray-600 text-sm">pts</span>
+                      </div>
+                    )}
+                    {!isGradedForPoints && (
+                      <span className="text-sm text-gray-500 italic">Not graded</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Question Input */}
@@ -565,9 +774,29 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                 {/* Correct Answer Instructions */}
                 {q.options.length > 0 && (
                   <div className="p-3 bg-teal-50 border border-teal-200 rounded-md">
-                    <p className="text-sm text-teal-800 font-medium">
-                      ✓ Check the boxes next to the correct answer(s)
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-teal-800 font-medium">
+                        ✓ Check the boxes next to the correct answer(s)
+                      </p>
+                      
+                      {/* ✅ NEW: Bulk Operations */}
+                      {q.options.length > 1 && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => selectAllOptions(qIndex)}
+                            className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 transition-colors"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            onClick={() => clearAllOptions(qIndex)}
+                            className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200 transition-colors"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -637,16 +866,31 @@ export const AssignmentCreator = ({ editingAssignment }: AssignmentCreatorProps)
                   );
                 })}
 
-                {/* Save/Edit Buttons for Options */}
+                {/* Save/Edit Buttons for Options with Enhanced Feedback */}
                 {q.options.length > 0 && (
                   <div className="flex items-center justify-between mt-4">
-                    <p className="text-teal-800 font-medium">
+                    <div className="flex flex-col">
                       {q.correctAnswers.length > 0 && (
-                        <span className="text-teal-600">
+                        <span className="text-teal-600 font-medium">
                           {q.correctAnswers.length} correct answer{q.correctAnswers.length !== 1 ? 's' : ''} selected
                         </span>
                       )}
-                    </p>
+                      {q.correctAnswers.length > 1 && (
+                        <span className="text-blue-600 text-sm">
+                          📋 Multiple choice question - students must select ALL correct answers
+                        </span>
+                      )}
+                      {q.correctAnswers.length === 1 && (
+                        <span className="text-gray-600 text-sm">
+                          ⚪ Single choice question - students select one answer
+                        </span>
+                      )}
+                      {q.correctAnswers.length === 0 && (
+                        <span className="text-red-600 text-sm">
+                          ⚠️ Please select at least one correct answer
+                        </span>
+                      )}
+                    </div>
                     {q.optionsEditable ? (
                       <button 
                         onClick={() => updateQuestion(qIndex, { optionsEditable: false })} 

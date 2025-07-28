@@ -24,18 +24,19 @@ interface Assignment {
   type: string;
 }
 
+// ✅ UPDATED: Interface to support both single and multiple selections
 interface StudentResponse {
   userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
-  userAssignmentResponse: number[];
+  userAssignmentResponse: (number | number[])[]; // ✅ FIXED: Support mixed response types
   score?: number; // ⭐ NEW: Auto-graded score from backend
   totalPoints?: number; // ⭐ NEW: Auto-graded total points
   percentage?: number; // ⭐ NEW: Auto-graded percentage
   gradingDetails?: Array<{ // ⭐ NEW: Detailed grading from backend
     questionKey: string;
     questionPoints: number;
-    studentAnswer: number;
+    studentAnswer: number | number[]; // ✅ FIXED: Support both single and multiple selections
     correctOptions: number[];
     isCorrect: boolean;
     pointsEarned: number;
@@ -87,7 +88,7 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
     }
   };
 
-  // ⭐ UPDATED: Use backend grading data when available, fallback to frontend calculation
+  // ✅ UPDATED: Fixed fallback calculation with proper multiple choice support
   const calculateStudentScore = (studentResponse: StudentResponse): { score: number; totalPoints: number; percentage: number } => {
     // ⭐ NEW: If backend already calculated the score, use that
     if (studentResponse.score !== undefined && studentResponse.totalPoints !== undefined && studentResponse.percentage !== undefined) {
@@ -99,7 +100,7 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
       };
     }
 
-    // ⭐ FALLBACK: Frontend calculation (for older responses or if backend grading failed)
+    // ✅ UPDATED: Frontend calculation with proper multiple choice support
     console.log('⚠️ Using frontend fallback calculation for', studentResponse.userId);
     
     if (!studentResponse.userAssignmentResponse || !assignment.questions) {
@@ -117,14 +118,27 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
       
       // ⭐ SAFETY CHECK: Only calculate if correctOptions exists
       if (correctAnswers && Array.isArray(correctAnswers)) {
-        // For single answer questions
         if (correctAnswers.length === 1) {
-          if (userAnswer === correctAnswers[0]) {
+          // Single choice question
+          const studentChoice = Array.isArray(userAnswer) ? userAnswer[0] : userAnswer;
+          if (studentChoice === correctAnswers[0]) {
             score += question.points;
           }
         } else {
-          // For multiple answer questions (basic scoring - could be enhanced)
-          if (correctAnswers.includes(userAnswer)) {
+          // ✅ FIXED: Multiple choice question - match backend logic
+          const studentSelections = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
+          
+          // Student must select ALL correct answers and NO incorrect ones
+          const hasAllCorrect = correctAnswers.every(correctOption => 
+            studentSelections.includes(correctOption)
+          );
+          const hasNoIncorrect = studentSelections.every(studentOption => 
+            correctAnswers.includes(studentOption)
+          );
+          
+          const isCorrect = hasAllCorrect && hasNoIncorrect && studentSelections.length === correctAnswers.length;
+          
+          if (isCorrect) {
             score += question.points;
           }
         }
@@ -330,7 +344,7 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                   </div>
                 </div>
 
-                {/* ⭐ UPDATED: Detailed Response View using backend grading data when available */}
+                {/* ✅ UPDATED: Detailed Response View with multiple choice support */}
                 {showDetailedView && isSelected && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <h4 className="font-medium text-teal-800 mb-3">Detailed Responses</h4>
@@ -343,15 +357,34 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                               <span className="text-teal-700">Question {qIndex + 1}:</span> 
                               {assignment.questions[detail.questionKey]?.question || 'Question not found'}
                             </div>
+                            
+                            {/* ✅ ADDED: Multiple choice indicator */}
+                            {detail.correctOptions && detail.correctOptions.length > 1 && (
+                              <div className="text-xs text-blue-600 mb-2">
+                                📋 Multiple Choice Question (select all correct answers)
+                              </div>
+                            )}
+                            
                             <div className="space-y-2 text-sm">
                               <div className={`flex items-center gap-2 p-2 rounded ${
                                 detail.isCorrect ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                               }`}>
                                 <span className="font-medium">Student Answer:</span>
                                 <span>
-                                  {detail.studentAnswer !== undefined && detail.studentAnswer !== -1 
-                                    ? assignment.questions[detail.questionKey]?.options[detail.studentAnswer] || `Option ${detail.studentAnswer + 1}`
-                                    : 'No answer'}
+                                  {/* ✅ FIXED: Handle both single and multiple selections */}
+                                  {Array.isArray(detail.studentAnswer) ? (
+                                    // Multiple selections
+                                    detail.studentAnswer.length > 0 ? 
+                                      detail.studentAnswer.map(answerIndex => 
+                                        assignment.questions[detail.questionKey]?.options[answerIndex] || `Option ${answerIndex + 1}`
+                                      ).join(', ') : 
+                                      'No selection'
+                                  ) : (
+                                    // Single selection
+                                    detail.studentAnswer !== undefined && detail.studentAnswer !== -1 
+                                      ? assignment.questions[detail.questionKey]?.options[detail.studentAnswer] || `Option ${detail.studentAnswer + 1}`
+                                      : 'No answer'
+                                  )}
                                 </span>
                                 <span className="ml-2">
                                   {detail.isCorrect ? '✓ Correct' : '✗ Incorrect'}
@@ -369,25 +402,63 @@ export const StudentResultsViewer = ({ assignment, onCloseAction }: StudentResul
                           </div>
                         ))
                       ) : (
-                        /* ⭐ FALLBACK: Use frontend calculation for older responses */
+                        /* ✅ UPDATED: Fallback calculation with multiple choice support */
                         Object.entries(assignment.questions).map(([questionKey, question], qIndex) => {
                           const userAnswer = response.userAssignmentResponse[qIndex];
-                          const isCorrect = question.correctOptions ? question.correctOptions.includes(userAnswer) : false;
+                          
+                          // Calculate if correct based on question type
+                          let isCorrect = false;
+                          if (question.correctOptions && Array.isArray(question.correctOptions)) {
+                            if (question.correctOptions.length === 1) {
+                              // Single choice
+                              const studentChoice = Array.isArray(userAnswer) ? userAnswer[0] : userAnswer;
+                              isCorrect = studentChoice === question.correctOptions[0];
+                            } else {
+                              // Multiple choice
+                              const studentSelections = Array.isArray(userAnswer) ? userAnswer : [userAnswer];
+                              const hasAllCorrect = question.correctOptions.every(correctOption => 
+                                studentSelections.includes(correctOption)
+                              );
+                              const hasNoIncorrect = studentSelections.every(studentOption => 
+                                question.correctOptions!.includes(studentOption)
+                              );
+                              isCorrect = hasAllCorrect && hasNoIncorrect && studentSelections.length === question.correctOptions.length;
+                            }
+                          }
 
                           return (
                             <div key={questionKey} className="bg-gray-50 rounded-md p-3 border">
                               <div className="font-medium text-gray-800 mb-2">
                                 <span className="text-teal-700">Question {qIndex + 1}:</span> {question.question}
                               </div>
+                              
+                              {/* ✅ ADDED: Multiple choice indicator for fallback */}
+                              {question.correctOptions && question.correctOptions.length > 1 && (
+                                <div className="text-xs text-blue-600 mb-2">
+                                  📋 Multiple Choice Question (select all correct answers)
+                                </div>
+                              )}
+                              
                               <div className="space-y-2 text-sm">
                                 <div className={`flex items-center gap-2 p-2 rounded ${
                                   isCorrect ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                                 }`}>
                                   <span className="font-medium">Student Answer:</span>
                                   <span>
-                                    {userAnswer !== undefined && userAnswer !== -1 
-                                      ? question.options[userAnswer] || `Option ${userAnswer + 1}`
-                                      : 'No answer'}
+                                    {/* ✅ FIXED: Handle both single and multiple for fallback */}
+                                    {Array.isArray(userAnswer) ? (
+                                      // Multiple selections
+                                      userAnswer.length > 0 ? 
+                                        userAnswer.map(answerIndex => 
+                                          question.options[answerIndex] || `Option ${answerIndex + 1}`
+                                        ).join(', ') : 
+                                        'No selection'
+                                    ) : (
+                                      // Single selection
+                                      userAnswer !== undefined && userAnswer !== -1 
+                                        ? question.options[userAnswer] || `Option ${userAnswer + 1}`
+                                        : 'No answer'
+                                    )}
                                   </span>
                                   <span className="ml-2">
                                     {question.correctOptions ? (isCorrect ? '✓ Correct' : '✗ Incorrect') : '? Cannot determine'}

@@ -1,4 +1,4 @@
-// types/index.ts - Updated with new assignment settings
+// types/index.ts - Updated with multiple choice support
 
 // ⭐ Updated AssignmentQuestion interface
 export interface AssignmentQuestion {
@@ -56,7 +56,7 @@ export interface ServerAssignment {
   assignmentOwnerId: string;
   title: string;
   questions: { [key: string]: StudentAssignmentQuestion };
-  correctAnswers: { [key: string]: { correctOptions: number[] } };
+  correctAnswers: { [key: string]: { correctOptions: number[], questionType: string } };
   createdAt: string;
   totalQuestions: number;
   status: string;
@@ -66,19 +66,21 @@ export interface ServerAssignment {
   isGradedForPoints?: boolean;
 }
 
-// ⭐ Updated assignment response interface
+// ✅ UPDATED: Assignment response interface with multiple choice support
 export interface AssignmentResponse {
   userId: string;
   assignmentId: string;
   assignmentOwnerId: string;
-  userAssignmentResponse: number[];
+  // ✅ FIXED: Support both single numbers and arrays for mixed response types
+  userAssignmentResponse: (number | number[])[];
   score: number;
   totalPoints: number;
   percentage: number;
   gradingDetails: Array<{
     questionKey: string;
     questionPoints: number;
-    studentAnswer: number;
+    // ✅ FIXED: Support both single and multiple selections
+    studentAnswer: number | number[];
     correctOptions: number[];
     isCorrect: boolean;
     pointsEarned: number;
@@ -121,4 +123,67 @@ export function cleanToComponentAssignment(cleanAssignment: CleanAssignment): As
     ...cleanAssignment,
     questions: componentQuestions
   };
+}
+
+// ✅ NEW: Helper function to determine if question is multiple choice
+export function isMultipleChoiceQuestion(correctOptions: number[]): boolean {
+  return Array.isArray(correctOptions) && correctOptions.length > 1;
+}
+
+// ✅ NEW: Helper function to format student answer display
+export function formatStudentAnswer(
+  studentAnswer: number | number[], 
+  options: string[], 
+  isMultipleChoice: boolean
+): string {
+  if (Array.isArray(studentAnswer)) {
+    // Multiple selections
+    return studentAnswer.length > 0 ? 
+      studentAnswer.map(answerIndex => options[answerIndex] || `Option ${answerIndex + 1}`).join(', ') : 
+      'No selection';
+  } else {
+    // Single selection
+    return studentAnswer !== undefined && studentAnswer !== -1 
+      ? options[studentAnswer] || `Option ${studentAnswer + 1}`
+      : 'No answer';
+  }
+}
+
+// ✅ NEW: Helper function to calculate score for single question (matches backend logic)
+export function calculateQuestionScore(
+  studentAnswer: number | number[],
+  correctOptions: number[],
+  questionPoints: number
+): { isCorrect: boolean; pointsEarned: number } {
+  if (!correctOptions || !Array.isArray(correctOptions)) {
+    return { isCorrect: false, pointsEarned: 0 };
+  }
+
+  if (correctOptions.length === 1) {
+    // Single choice question
+    const studentChoice = Array.isArray(studentAnswer) ? studentAnswer[0] : studentAnswer;
+    const isCorrect = studentChoice === correctOptions[0];
+    return {
+      isCorrect,
+      pointsEarned: isCorrect ? questionPoints : 0
+    };
+  } else {
+    // Multiple choice question - match backend logic
+    const studentSelections = Array.isArray(studentAnswer) ? studentAnswer : [studentAnswer];
+    
+    // Student must select ALL correct answers and NO incorrect ones
+    const hasAllCorrect = correctOptions.every(correctOption => 
+      studentSelections.includes(correctOption)
+    );
+    const hasNoIncorrect = studentSelections.every(studentOption => 
+      correctOptions.includes(studentOption)
+    );
+    
+    const isCorrect = hasAllCorrect && hasNoIncorrect && studentSelections.length === correctOptions.length;
+    
+    return {
+      isCorrect,
+      pointsEarned: isCorrect ? questionPoints : 0
+    };
+  }
 }

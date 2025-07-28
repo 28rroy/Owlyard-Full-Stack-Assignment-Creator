@@ -11,15 +11,21 @@ const corsHeaders = {
     'Access-Control-Allow-Methods': 'GET,OPTIONS'
 };
 
-// ⭐ UPDATED: Function to return complete assignment data for teachers
+// ✅ UPDATED: Function to return complete assignment data for teachers
 function getCompleteAssignmentForTeacher(item) {
     const completeQuestions = {};
     
     // Merge clean questions with correct answers
     Object.entries(item.questions || {}).forEach(([key, question]) => {
+        const correctAnswerData = item.correctAnswers?.[key] || {};
+        const correctOptions = correctAnswerData.correctOptions || [];
+        const questionType = correctOptions.length > 1 ? 'multiple' : 'single';
+        
         completeQuestions[key] = {
             ...question,
-            correctOptions: item.correctAnswers?.[key]?.correctOptions || []
+            correctOptions: correctOptions,
+            // ✅ ENSURE: Question type is consistent with correct options
+            questionType: questionType
         };
     });
     
@@ -33,29 +39,39 @@ function getCompleteAssignmentForTeacher(item) {
         totalQuestions: item.totalQuestions,
         status: item.status,
         type: item.type,
-        // ⭐ NEW: Include assignment settings
+        // ⭐ Include assignment settings
         showCorrectAnswers: item.showCorrectAnswers ?? true,
         isGradedForPoints: item.isGradedForPoints ?? true
     };
 }
 
-// ⭐ UPDATED: Function to return student-safe assignment data
+// ✅ UPDATED: Function to return student-safe assignment data with question types
 function cleanAssignmentForStudent(item) {
-    // Aggressively clean questions by reconstructing them without any correctOptions
+    // Clean questions and add question types based on correct answers
     const cleanQuestions = {};
+    const correctAnswers = item.correctAnswers || {};
+    
     Object.entries(item.questions || {}).forEach(([key, question]) => {
+        // Determine question type from correct answers without exposing them
+        const correctAnswerData = correctAnswers[key] || {};
+        const correctOptions = correctAnswerData.correctOptions || [];
+        const questionType = correctOptions.length > 1 ? 'multiple' : 'single';
+        
         // Only include safe fields, explicitly exclude correctOptions
         cleanQuestions[key] = {
             question: question.question || "",
             options: question.options || [],
             explanation: question.explanation || "",
-            points: question.points || 1
+            points: question.points || 1,
+            // ✅ ADDED: Include question type for UI rendering (safe to expose)
+            questionType: questionType
         };
         
         // Log for debugging
         if (question.correctOptions) {
             console.log(`⚠️ Removed correctOptions from question ${key} for student safety`);
         }
+        console.log(`✅ Question ${key}: type=${questionType}, correctOptions=${correctOptions.length}`);
     });
 
     console.log(`🔒 Cleaned ${Object.keys(cleanQuestions).length} questions for student`);
@@ -65,12 +81,12 @@ function cleanAssignmentForStudent(item) {
         assignmentId: item.assignmentId,
         assignmentOwnerId: item.assignmentOwnerId,
         title: item.title,
-        questions: cleanQuestions, // Use completely cleaned questions
+        questions: cleanQuestions, // Use completely cleaned questions with questionType
         createdAt: item.createdAt,
         totalQuestions: item.totalQuestions,
         status: item.status,
         type: item.type,
-        // ⭐ NEW: Students need to know these settings for UI behavior
+        // ⭐ Students need to know these settings for UI behavior
         showCorrectAnswers: item.showCorrectAnswers ?? true,
         isGradedForPoints: item.isGradedForPoints ?? true
     };
@@ -106,8 +122,7 @@ export const handler = async (event) => {
         // ⭐ UPDATED: Determine if this is a teacher request (can see complete data)
         const isTeacherRequest = userRole === 'teacher' && requestingUserId === userId;
         
-        console.log('Request type:', isTeacherRequest ? 
-            'Teacher (complete data)' : 'Student (clean data)');
+        console.log('Request type:', isTeacherRequest ? 'Teacher (complete data)' : 'Student (clean data)');
         
         if (userId && assignmentId) {
             // Get specific assignment for specific user

@@ -70,7 +70,7 @@ interface AssignmentViewerProps {
 }
 
 export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onCloseAction }: AssignmentViewerProps) => {
-  const [responses, setResponses] = useState<number[][]>([]);  // Changed to array of arrays for multiple selections
+  const [responses, setResponses] = useState<(number | number[])[]>([]);  // ✅ FIXED: Allow both single and array
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -79,7 +79,10 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
   const [visibleQuestionIndex, setVisibleQuestionIndex] = useState(0);
 
   const totalQuestions = Object.keys(assignment.questions).length;
-  const answeredQuestions = responses.filter(r => Array.isArray(r) ? r.length > 0 : r !== -1).length;
+  // ✅ FIXED: Proper type checking for answeredQuestions
+  const answeredQuestions = responses.filter(r => 
+    Array.isArray(r) ? r.length > 0 : (typeof r === 'number' && r !== -1)
+  ).length;
   const completionPercentage = Math.round((answeredQuestions / totalQuestions) * 100);
   const questionsArray = Object.entries(assignment.questions);
 
@@ -95,7 +98,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     
     // Initialize responses array and check permissions
     const questionCount = Object.keys(assignment.questions).length;
-    setResponses(new Array(questionCount).fill([]));  // Initialize with empty arrays for multiple selections
+    setResponses(new Array(questionCount).fill(-1));  // ✅ FIXED: Initialize with -1 for unanswered
     
     // Debug assignment settings
     console.log('🔍 Assignment settings debug:', {
@@ -152,18 +155,38 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     }
   };
 
+  // ✅ NEW: Helper function to determine if question is multiple choice
+  const isQuestionMultipleChoice = (questionIndex: number): boolean => {
+    const questionKey = (questionIndex + 1).toString();
+    const question = assignment.questions[questionKey];
+    
+    // ✅ SOLUTION: Use questionType from the clean assignment data
+    if (question && 'questionType' in question) {
+      return (question as any).questionType === 'multiple';
+    }
+    
+    // Fallback: After submission, use grading details
+    if (shouldShowResults()) {
+      const questionResult = getQuestionResult(questionIndex);
+      return (questionResult?.correctOptions || []).length > 1;
+    }
+    
+    // Default fallback: treat as single choice
+    return false;
+  };
+
   const handleOptionSelect = (questionIndex: number, optionIndex: number) => {
     if (isSubmitted && !canEdit) return;
     
-    const question = questionsArray[questionIndex][1];
-    const correctOptions = getQuestionResult(questionIndex)?.correctOptions || [];
-    const isMultipleChoice = correctOptions.length > 1;
+    const isMultipleChoice = isQuestionMultipleChoice(questionIndex);
     
     const newResponses = [...responses];
     
     if (isMultipleChoice) {
       // Multiple choice: toggle selection
-      const currentSelections = Array.isArray(newResponses[questionIndex]) ? [...newResponses[questionIndex]] : [];
+      const currentSelections = Array.isArray(newResponses[questionIndex]) 
+        ? [...(newResponses[questionIndex] as number[])] 
+        : [];
       const selectionIndex = currentSelections.indexOf(optionIndex);
       
       if (selectionIndex > -1) {
@@ -177,14 +200,23 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
       newResponses[questionIndex] = currentSelections;
     } else {
       // Single choice: replace selection
-      newResponses[questionIndex] = [optionIndex];
+      newResponses[questionIndex] = optionIndex;  // Store as single number for single choice
     }
     
     setResponses(newResponses);
   };
 
   const handleSubmit = async () => {
-    const unanswered = responses.findIndex(r => !Array.isArray(r) || r.length === 0);
+    // ✅ FIXED: Proper validation for both single and multiple choice
+    const unanswered = responses.findIndex((r, index) => {
+      const isMultiple = isQuestionMultipleChoice(index);
+      if (isMultiple) {
+        return !Array.isArray(r) || r.length === 0;
+      } else {
+        return typeof r !== 'number' || r === -1;
+      }
+    });
+    
     if (unanswered !== -1) {
       alert(`Please answer question ${unanswered + 1} before submitting.`);
       return;
@@ -193,16 +225,15 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     setIsSubmitting(true);
 
     try {
-      // Convert responses back to single values for single-choice questions
+      // Convert responses to appropriate format for backend
       const convertedResponses = responses.map((response, index) => {
-        const question = questionsArray[index][1];
-        const correctOptions = getQuestionResult(index)?.correctOptions || [];
-        const isMultipleChoice = correctOptions.length > 1;
+        const isMultiple = isQuestionMultipleChoice(index);
         
-        if (isMultipleChoice) {
-          return response; // Keep as array for multiple choice
+        if (isMultiple) {
+          return Array.isArray(response) ? response : []; // Keep as array for multiple choice
         } else {
-          return response[0] || -1; // Convert to single value for single choice
+          return typeof response === 'number' ? response : 
+                 (Array.isArray(response) ? response[0] || -1 : -1); // Convert to single value for single choice
         }
       });
 
@@ -227,7 +258,9 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
         const data = await response.json();
         console.log('Assignment submitted and automatically graded:', data);
         
-        const gradeMessage = data.score !== undefined && data.totalPoints !== undefined
+      const gradeMessage = assignment.isGradedForPoints === false 
+        ? 'Practice assignment completed successfully!\n\nGreat job practicing these concepts!'
+        : data.score !== undefined && data.totalPoints !== undefined
           ? `Assignment submitted successfully!\n\nScore: ${data.score}/${data.totalPoints} points (${data.percentage}%)\nGrading: ${data.gradingSummary || 'Complete'}`
           : 'Assignment submitted successfully!';
           
@@ -289,8 +322,10 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     );
   };
 
-  const getQuestionType = (question: any): string => {
-    return 'Single Choice';
+  // ✅ UPDATED: Show correct question type
+  const getQuestionType = (question: any, questionIndex: number): string => {
+    const isMultiple = isQuestionMultipleChoice(questionIndex);
+    return isMultiple ? 'Multiple Choice' : 'Single Choice';
   };
 
   // Scroll to specific question
@@ -327,7 +362,10 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
 
   // Get question status for navigation
   const getQuestionStatus = (index: number) => {
-    if (responses[index] !== -1) return 'answered';
+    const response = responses[index];
+    if (Array.isArray(response) ? response.length > 0 : (typeof response === 'number' && response !== -1)) {
+      return 'answered';
+    }
     return 'unanswered';
   };
 
@@ -343,14 +381,27 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
           <h1 className="text-xl font-bold text-teal-800">{assignment.title}</h1>
           <div className="text-xs text-gray-600 mt-1">
             <span>{totalQuestions} questions</span>
-            <span className="mx-2">•</span>
-            <span>
-              {Object.values(assignment.questions).reduce((sum, q) => sum + q.points, 0)} total points
-            </span>
+            {/* ✅ UPDATED: Only show points info if assignment is graded */}
+            {assignment.isGradedForPoints !== false && (
+              <>
+                <span className="mx-2">•</span>
+                <span>
+                  {Object.values(assignment.questions).reduce((sum, q) => sum + q.points, 0)} total points
+                </span>
+              </>
+            )}
+            {/* ✅ NEW: Show ungraded indicator */}
+            {assignment.isGradedForPoints === false && (
+              <>
+                <span className="mx-2">•</span>
+                <span className="text-blue-600 font-medium">Ungraded Practice</span>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
-          {shouldShowResults() && existingResponse && (
+          {/* ✅ UPDATED: Only show score for graded assignments */}
+          {shouldShowResults() && existingResponse && assignment.isGradedForPoints !== false && (
             <div className="text-right">
               <div className="text-xl font-bold text-teal-600">
                 {existingResponse.score}/{existingResponse.totalPoints}
@@ -358,6 +409,13 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
               <div className="text-xs text-gray-600">
                 {existingResponse.percentage}% • {existingResponse.score >= existingResponse.totalPoints * 0.7 ? '✅ Passed' : '❌ Failed'}
               </div>
+            </div>
+          )}
+          {/* ✅ NEW: Show completion status for ungraded assignments */}
+          {shouldShowResults() && existingResponse && assignment.isGradedForPoints === false && (
+            <div className="text-right">
+              <div className="text-lg font-bold text-green-600">✓ Completed</div>
+              <div className="text-xs text-gray-600">Practice Assignment</div>
             </div>
           )}
           <button
@@ -499,19 +557,32 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                       <div>
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">
                           Question {index + 1}
-                          <span className="ml-3 text-lg text-gray-500 font-normal">
-                            ({question.points} point{question.points !== 1 ? 's' : ''})
-                          </span>
+                          {/* ✅ UPDATED: Only show points if assignment is graded */}
+                          {assignment.isGradedForPoints !== false && (
+                            <span className="ml-3 text-lg text-gray-500 font-normal">
+                              ({question.points} point{question.points !== 1 ? 's' : ''})
+                            </span>
+                          )}
+                          {/* ✅ NEW: Show practice indicator for ungraded */}
+                          {assignment.isGradedForPoints === false && (
+                            <span className="ml-3 text-sm text-blue-600 font-normal bg-blue-100 px-2 py-1 rounded">
+                              Practice Question
+                            </span>
+                          )}
                         </h2>
                         <div className="flex items-center gap-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            question.points > 1
+                            assignment.isGradedForPoints === false
+                              ? 'bg-blue-100 text-blue-800'  // ✅ NEW: Blue for ungraded
+                              : question.points > 1
                               ? 'bg-orange-100 text-orange-800'
                               : 'bg-blue-100 text-blue-800'
                           }`}>
                             {getQuestionType(question, index)}
                           </span>
-                          {shouldShowResults() && questionResult && (
+                          
+                          {/* ✅ UPDATED: Only show point results for graded assignments */}
+                          {shouldShowResults() && questionResult && assignment.isGradedForPoints !== false && (
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                               questionResult.isCorrect 
                                 ? 'bg-green-100 text-green-800' 
@@ -520,6 +591,17 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                               {questionResult.isCorrect 
                                 ? `✓ Correct (+${questionResult.pointsEarned})` 
                                 : '✗ Incorrect (0)'}
+                            </span>
+                          )}
+                          
+                          {/* ✅ NEW: Show completion status for ungraded assignments */}
+                          {shouldShowResults() && questionResult && assignment.isGradedForPoints === false && (
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                              questionResult.isCorrect 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {questionResult.isCorrect ? '✓ Correct' : '✗ Incorrect'}
                             </span>
                           )}
                         </div>
@@ -531,11 +613,9 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                       <KaTeXRenderer>{question.question}</KaTeXRenderer>
                     </div>
 
-                    {/* Multiple Choice Instructions */}
+                    {/* ✅ UPDATED: Multiple Choice Instructions using new detection */}
                     {(() => {
-                      const questionResult = getQuestionResult(index);
-                      const correctOptions = questionResult?.correctOptions || [];
-                      const isMultipleChoice = correctOptions.length > 1;
+                      const isMultipleChoice = isQuestionMultipleChoice(index);
                       
                       if (isMultipleChoice) {
                         return (
@@ -552,15 +632,19 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                       return null;
                     })()}
 
-                    {/* Options */}
+                    {/* ✅ UPDATED: Options with proper multiple choice detection */}
                     <div className="space-y-3">
                       {question.options.map((option, optionIndex) => {
+                        const isMultipleChoice = isQuestionMultipleChoice(index);
                         const questionResult = getQuestionResult(index);
                         const correctOptions = questionResult?.correctOptions || [];
-                        const isMultipleChoice = correctOptions.length > 1;
                         
-                        const currentResponse = responses[index] || [];
-                        const isSelected = Array.isArray(currentResponse) ? currentResponse.includes(optionIndex) : currentResponse === optionIndex;
+                        const currentResponse = responses[index];
+                        // ✅ FIXED: Proper type checking for isSelected
+                        const isSelected = isMultipleChoice ? 
+                          (Array.isArray(currentResponse) ? currentResponse.includes(optionIndex) : false) :
+                          (typeof currentResponse === 'number' ? currentResponse === optionIndex : 
+                           Array.isArray(currentResponse) ? currentResponse.includes(optionIndex) : false);
                         const isCorrectOption = correctOptions.includes(optionIndex);
                         const showCorrectAnswer = shouldShowCorrectAnswers();
 
@@ -589,7 +673,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                             onClick={() => handleOptionSelect(index, optionIndex)}
                           >
                             <div className="flex items-center gap-4">
-                              {/* Checkbox or Radio Button */}
+                              {/* ✅ UPDATED: Checkbox or Radio Button based on question type */}
                               {isMultipleChoice ? (
                                 // Checkbox for multiple choice
                                 <div className={`relative w-5 h-5 border-2 rounded-md flex items-center justify-center transition-all duration-200 ${
@@ -688,10 +772,16 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                           Result:
                         </div>
                         <div className={`font-medium ${questionResult.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
-                          {questionResult.isCorrect 
-                            ? `✓ Correct! You earned ${questionResult.pointsEarned} point${questionResult.pointsEarned !== 1 ? 's' : ''}.`
-                            : '✗ Incorrect. Review the material and try again on future assignments.'
-                          }
+                          {questionResult.isCorrect ? (
+                            // ✅ UPDATED: Different messages for graded vs ungraded
+                            assignment.isGradedForPoints !== false 
+                              ? `✓ Correct! You earned ${questionResult.pointsEarned} point${questionResult.pointsEarned !== 1 ? 's' : ''}.`
+                              : '✓ Correct! Well done on this practice question.'
+                          ) : (
+                            assignment.isGradedForPoints !== false
+                              ? '✗ Incorrect. Review the material and try again on future assignments.'
+                              : '✗ Incorrect. This is practice - review the material and keep learning!'
+                          )}
                         </div>
                       </div>
                     )}
@@ -709,19 +799,26 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                   <div className="flex items-center gap-4">
                     <div className="text-xs text-gray-600">
                       <span className={`font-medium ${answeredQuestions === totalQuestions ? 'text-green-600' : 'text-orange-600'}`}>
-                        {answeredQuestions} of {totalQuestions} answered
+                        {answeredQuestions} of {totalQuestions} {assignment.isGradedForPoints === false ? 'completed' : 'answered'}
                       </span>
                     </div>
                     <button
                       onClick={handleSubmit}
-                      disabled={isSubmitting || responses.some(r => !Array.isArray(r) || r.length === 0)}
+                      disabled={isSubmitting || responses.some((r, index) => {
+                        const isMultiple = isQuestionMultipleChoice(index);
+                        return isMultiple ? (!Array.isArray(r) || r.length === 0) : (typeof r !== 'number' || r === -1);
+                      })}
                       className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 ${
-                        isSubmitting || responses.some(r => !Array.isArray(r) || r.length === 0)
+                        isSubmitting || responses.some((r, index) => {
+                          const isMultiple = isQuestionMultipleChoice(index);
+                          return isMultiple ? (!Array.isArray(r) || r.length === 0) : (typeof r !== 'number' || r === -1);
+                        })
                           ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                           : 'bg-teal-600 text-white hover:bg-teal-700 transform hover:scale-105 shadow-lg hover:shadow-xl'
                       }`}
                     >
-                      {isSubmitting ? 'Submitting...' : 'Submit Assignment'}
+                      {isSubmitting ? 'Submitting...' : 
+                       assignment.isGradedForPoints === false ? 'Complete Practice' : 'Submit Assignment'}
                     </button>
                   </div>
                 </div>
