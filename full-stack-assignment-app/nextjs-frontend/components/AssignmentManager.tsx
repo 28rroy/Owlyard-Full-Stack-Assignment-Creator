@@ -16,10 +16,24 @@ interface AssignmentStats {
   difficultyLevel: 'Easy' | 'Medium' | 'Hard';
 }
 
+interface Grade {
+  assignmentId: string;
+  userId: string;
+  score: number;
+  totalPoints: number;
+  percentage: number;
+  submittedAt: string;
+  gradedAt: string;
+  status: string;
+  type: string;
+}
+
 export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [allGrades, setAllGrades] = useState<Grade[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
   
   // Search & Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,26 +45,22 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
   const [selectedAssignments, setSelectedAssignments] = useState<Set<string>>(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
 
-  // Handle close
   const handleClose = () => {
     window.dispatchEvent(new CustomEvent('close-assignment-manager'));
   };
 
-  // Handle edit assignment
   const handleEditAssignment = (assignment: Assignment) => {
     window.dispatchEvent(new CustomEvent('edit-assignment', { 
       detail: assignment 
     }));
   };
 
-  // Handle view student results
   const handleViewStudentResults = (assignment: Assignment) => {
     window.dispatchEvent(new CustomEvent('view-student-results', { 
       detail: assignment 
     }));
   };
 
-  // Handle duplicate assignment
   const handleDuplicateAssignment = async (assignment: Assignment) => {
     const newTitle = `${assignment.title} (Copy)`;
     
@@ -61,12 +71,11 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
     if (!confirmDuplicate) return;
 
     try {
-      console.log('🔄 Duplicating assignment:', assignment.assignmentId);
+      // console.log('🔄 Duplicating assignment:', assignment.assignmentId);
       
       const duplicatedAssignment = {
         ...assignment,
         title: newTitle,
-        // Remove IDs so new ones are generated
         assignmentId: undefined,
         createdAt: new Date().toISOString()
       };
@@ -81,24 +90,21 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('✅ Assignment duplicated successfully:', result);
+        // console.log('✅ Assignment duplicated successfully:', result);
         
         alert(`Assignment duplicated successfully as "${newTitle}"!`);
-        
-        // Refresh assignments list
         fetchAssignments();
       } else {
         const error = await response.json();
-        console.error('❌ Duplicate failed:', error);
+        // console.error('❌ Duplicate failed:', error);
         alert(`Failed to duplicate assignment: ${error.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('❌ Error duplicating assignment:', error);
+      // console.error('❌ Error duplicating assignment:', error);
       alert('Failed to duplicate assignment. Please try again.');
     }
   };
 
-  // Handle delete assignment
   const handleDeleteAssignment = async (assignment: Assignment) => {
     const confirmDelete = confirm(
       `Are you sure you want to delete "${assignment.title}"?\n\nThis action cannot be undone and will remove:\n- The assignment\n- All student responses\n- All associated data`
@@ -109,7 +115,7 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
     setDeleting(assignment.assignmentId);
     
     try {
-      console.log('🗑️ Deleting assignment:', assignment.assignmentId);
+      // console.log('🗑️ Deleting assignment:', assignment.assignmentId);
       
       const response = await fetch(`/api/assignments`, {
         method: 'DELETE',
@@ -125,9 +131,8 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
 
       if (response.ok) {
         const result = await response.json();
-        console.log('✅ Assignment deleted successfully:', result);
+        // console.log('✅ Assignment deleted successfully:', result);
         
-        // Remove from local state
         setAssignments(prev => prev.filter(a => a.assignmentId !== assignment.assignmentId));
         setSelectedAssignments(prev => {
           const newSet = new Set(prev);
@@ -138,18 +143,17 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
         alert(`Assignment "${assignment.title}" deleted successfully!`);
       } else {
         const error = await response.json();
-        console.error('❌ Delete failed:', error);
+        // console.error('❌ Delete failed:', error);
         alert(`Failed to delete assignment: ${error.error || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('❌ Error deleting assignment:', error);
+      // console.error('❌ Error deleting assignment:', error);
       alert('Failed to delete assignment. Please try again.');
     } finally {
       setDeleting(null);
     }
   };
 
-  // Bulk delete
   const handleBulkDelete = async () => {
     const selectedCount = selectedAssignments.size;
     const confirmDelete = confirm(
@@ -161,7 +165,6 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
     const assignmentsToDelete = assignments.filter(a => selectedAssignments.has(a.assignmentId));
     
     try {
-      // Delete in parallel
       await Promise.all(
         assignmentsToDelete.map(assignment => 
           fetch(`/api/assignments`, {
@@ -176,19 +179,17 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
         )
       );
 
-      // Remove from local state
       setAssignments(prev => prev.filter(a => !selectedAssignments.has(a.assignmentId)));
       setSelectedAssignments(new Set());
       setShowBulkActions(false);
       
       alert(`${selectedCount} assignment${selectedCount > 1 ? 's' : ''} deleted successfully!`);
     } catch (error) {
-      console.error('❌ Error in bulk delete:', error);
+      // console.error('❌ Error in bulk delete:', error);
       alert('Some assignments may not have been deleted. Please refresh and try again.');
     }
   };
 
-  // Selection handlers
   const handleSelectAssignment = (assignmentId: string) => {
     const newSelection = new Set(selectedAssignments);
     if (newSelection.has(assignmentId)) {
@@ -210,10 +211,46 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
     }
   };
 
-  // Fetch assignments for teacher
+  const fetchAnalyticsData = async () => {
+    if (assignments.length === 0) return;
+    
+    setAnalyticsLoading(true);
+    // console.log('📊 Fetching analytics data for assignments...');
+    
+    try {
+      const gradesPromises = assignments.map(async (assignment) => {
+        try {
+          const response = await fetch(
+            `/api/grades?assignmentId=${assignment.assignmentId}&action=get-all-grades-for-assignment`
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            // console.log(`📊 Grades for ${assignment.title}:`, data.grades?.length || 0);
+            return data.grades || [];
+          }
+          return [];
+        } catch (error) {
+          // console.error(`❌ Error fetching grades for ${assignment.assignmentId}:`, error);
+          return [];
+        }
+      });
+      
+      const allGradesArrays = await Promise.all(gradesPromises);
+      const combinedGrades = allGradesArrays.flat();
+      
+      // console.log('📊 Total grades fetched:', combinedGrades.length);
+      setAllGrades(combinedGrades);
+    } catch (error) {
+      // console.error('❌ Error fetching analytics data:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
   const fetchAssignments = async () => {
     setLoading(true);
-    console.log('🔍 FRONTEND DEBUG: Starting to fetch assignments...');
+    // console.log('🔍 FRONTEND DEBUG: Starting to fetch assignments...');
     
     try {
       const url = `/api/assignments?userId=${userId}&requestingUserId=${userId}&userRole=teacher`;
@@ -222,17 +259,17 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
       if (response.ok) {
         const data = await response.json();
         if (data.assignments && Array.isArray(data.assignments)) {
-          // Don't add mock analytics - keep real data
           setAssignments(data.assignments);
+          // console.log('✅ Assignments fetched:', data.assignments.length);
         } else {
           setAssignments([]);
         }
       } else {
-        console.error('❌ API response not ok:', response.status);
+        // console.error('❌ API response not ok:', response.status);
         setAssignments([]);
       }
     } catch (error) {
-      console.error('❌ Error fetching assignments:', error);
+      // console.error('❌ Error fetching assignments:', error);
       setAssignments([]);
     } finally {
       setLoading(false);
@@ -243,34 +280,62 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
     fetchAssignments();
   }, [userId]);
 
-  // Calculate total points for an assignment
+  useEffect(() => {
+    if (assignments.length > 0) {
+      fetchAnalyticsData();
+    }
+  }, [assignments]);
+
   const getTotalPoints = (questions: { [key: string]: any } | undefined | null): number => {
     if (!questions || typeof questions !== 'object') return 0;
     return Object.values(questions).reduce((total, question) => total + (question?.points || 0), 0);
   };
 
-  // Get assignment stats
-  const getAssignmentStats = (assignment: any): AssignmentStats => {
+  const getAssignmentStats = (assignment: Assignment): AssignmentStats => {
     const totalPoints = getTotalPoints(assignment.questions);
     const difficultyLevel = totalPoints > 10 ? 'Hard' : totalPoints > 5 ? 'Medium' : 'Easy';
     
+    const assignmentGrades = allGrades.filter(grade => grade.assignmentId === assignment.assignmentId);
+    const responseCount = assignmentGrades.length;
+    
+    let averageScore = 0;
+    if (responseCount > 0) {
+      const totalPercentage = assignmentGrades.reduce((sum, grade) => sum + grade.percentage, 0);
+      averageScore = Math.round(totalPercentage / responseCount);
+    }
+    
+    let lastActivity = assignment.createdAt;
+    if (assignmentGrades.length > 0) {
+      const mostRecentSubmission = assignmentGrades
+        .map(grade => new Date(grade.submittedAt))
+        .sort((a, b) => b.getTime() - a.getTime())[0];
+      lastActivity = mostRecentSubmission.toISOString();
+    }
+    
+    const completionRate = responseCount > 0 ? 100 : 0;
+    
+    // console.log(`📊 Stats for ${assignment.title}:`, {
+    //   responseCount,
+    //   averageScore,
+    //   completionRate,
+    //   lastActivity: new Date(lastActivity).toLocaleDateString()
+    // });
+    
     return {
-      responseCount: assignment.responseCount || 0,
-      averageScore: assignment.averageScore || 0,
-      completionRate: assignment.completionRate || 0,
-      lastActivity: assignment.lastActivity || assignment.createdAt,
+      responseCount,
+      averageScore,
+      completionRate,
+      lastActivity,
       difficultyLevel
     };
   };
 
-  // Check if date is within last week
   const isWithinLastWeek = (dateString: string): boolean => {
     const date = new Date(dateString);
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     return date > weekAgo;
   };
 
-  // Filter and sort assignments
   const filteredAssignments = useMemo(() => {
     return assignments
       .filter(assignment => {
@@ -295,23 +360,30 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
           default: return 0;
         }
       });
-  }, [assignments, searchTerm, filterBy, sortBy]);
+  }, [assignments, searchTerm, filterBy, sortBy, allGrades]);
 
-  // Calculate dashboard stats
   const dashboardStats = useMemo(() => {
     const total = assignments.length;
     const graded = assignments.filter(a => a.isGradedForPoints).length;
     const practice = total - graded;
     const thisWeek = assignments.filter(a => isWithinLastWeek(a.createdAt)).length;
-    const totalResponses = assignments.reduce((sum, a) => sum + (getAssignmentStats(a).responseCount), 0);
-    const avgScore = assignments.length > 0 
-      ? Math.round(assignments.reduce((sum, a) => sum + getAssignmentStats(a).averageScore, 0) / assignments.length)
+    const totalResponses = allGrades.length;
+    const avgScore = allGrades.length > 0 
+      ? Math.round(allGrades.reduce((sum, grade) => sum + grade.percentage, 0) / allGrades.length)
       : 0;
 
-    return { total, graded, practice, thisWeek, totalResponses, avgScore };
-  }, [assignments]);
+    // console.log('📊 Dashboard stats:', {
+    //   total,
+    //   graded,
+    //   practice,
+    //   thisWeek,
+    //   totalResponses,
+    //   avgScore
+    // });
 
-  // Format time ago
+    return { total, graded, practice, thisWeek, totalResponses, avgScore };
+  }, [assignments, allGrades]);
+
   const formatTimeAgo = (dateString: string): string => {
     const date = new Date(dateString);
     const now = new Date();
@@ -332,7 +404,10 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-teal-800">Assignment Manager</h1>
-            <p className="text-xs text-gray-600 mt-1">Manage, analyze, and organize your assignments</p>
+            <p className="text-xs text-gray-600 mt-1">
+              Manage, analyze, and organize your assignments
+              {analyticsLoading && <span className="ml-2 text-blue-600">📊 Loading analytics...</span>}
+            </p>
           </div>
           <button
             onClick={handleClose}
@@ -363,11 +438,15 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
             <div className="text-xs text-purple-800">This Week</div>
           </div>
           <div className="bg-teal-50 rounded-lg p-2 text-center">
-            <div className="text-xl font-bold text-teal-600">{dashboardStats.totalResponses}</div>
+            <div className="text-xl font-bold text-teal-600">
+              {analyticsLoading ? '...' : dashboardStats.totalResponses}
+            </div>
             <div className="text-xs text-teal-800">Responses</div>
           </div>
           <div className="bg-indigo-50 rounded-lg p-2 text-center">
-            <div className="text-xl font-bold text-indigo-600">{dashboardStats.avgScore}%</div>
+            <div className="text-xl font-bold text-indigo-600">
+              {analyticsLoading ? '...' : dashboardStats.avgScore}%
+            </div>
             <div className="text-xs text-indigo-800">Avg Score</div>
           </div>
         </div>
@@ -376,9 +455,7 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
       {/* Controls Bar */}
       <div className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          {/* Search and Filters */}
           <div className="flex flex-wrap gap-3 items-center">
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
@@ -390,7 +467,6 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
               />
             </div>
 
-            {/* Filter */}
             <select
               value={filterBy}
               onChange={(e) => setFilterBy(e.target.value)}
@@ -402,7 +478,6 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
               <option value="recent">Recent (7 days)</option>
             </select>
 
-            {/* Sort */}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -416,9 +491,7 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
             </select>
           </div>
 
-          {/* View Controls */}
           <div className="flex items-center gap-2">
-            {/* Bulk Actions */}
             {showBulkActions && (
               <div className="flex items-center gap-2 mr-4">
                 <span className="text-sm text-gray-600">{selectedAssignments.size} selected</span>
@@ -431,7 +504,6 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
               </div>
             )}
 
-            {/* Select All */}
             <button
               onClick={handleSelectAll}
               className="flex items-center gap-1 px-3 py-2 text-sm text-gray-900 font-medium border border-gray-300 rounded-md hover:bg-gray-50"
@@ -442,7 +514,6 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
               Select All
             </button>
 
-            {/* View Mode */}
             <div className="flex border border-gray-300 rounded-md">
               <button
                 onClick={() => setViewMode('grid')}
@@ -509,7 +580,6 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
                     isSelected ? 'ring-2 ring-teal-500 border-teal-300' : 'border-gray-200'
                   } ${viewMode === 'list' ? 'p-5' : 'p-5'}`}
                 >
-                  {/* Card Header */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <button
@@ -526,7 +596,6 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
                     </div>
                   </div>
 
-                  {/* Assignment Info */}
                   <div className="space-y-2 mb-4">
                     <div className="flex items-center justify-between text-sm text-gray-600">
                       <span>{assignment.totalQuestions} questions</span>
@@ -560,25 +629,26 @@ export const AssignmentManager = ({ userId }: AssignmentManagerProps) => {
                     </div>
                   </div>
 
-                  {/* Analytics */}
                   <div className="grid grid-cols-2 gap-2 mb-4 text-xs text-gray-500">
                     <div className="text-center">
-                      <div className="font-semibold text-gray-900">{stats.responseCount}</div>
+                      <div className="font-semibold text-gray-900">
+                        {analyticsLoading ? '...' : stats.responseCount}
+                      </div>
                       <div>Responses</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-semibold text-gray-900">{stats.averageScore}%</div>
+                      <div className="font-semibold text-gray-900">
+                        {analyticsLoading ? '...' : stats.averageScore}%
+                      </div>
                       <div>Avg Score</div>
                     </div>
                   </div>
 
-                  {/* Timestamps */}
                   <div className="text-xs text-gray-500 mb-4">
                     <div>Created: {new Date(assignment.createdAt).toLocaleDateString()}</div>
                     <div>Last activity: {formatTimeAgo(stats.lastActivity)}</div>
                   </div>
 
-                  {/* Actions */}
                   <div className="flex flex-wrap items-center gap-1">
                     <button
                       onClick={() => handleEditAssignment(assignment)}

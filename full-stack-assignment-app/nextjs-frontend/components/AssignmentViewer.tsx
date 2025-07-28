@@ -7,13 +7,11 @@ import 'katex/dist/katex.min.css';
 
 import { Assignment, AssignmentResponse, verifyStudentDataSecurity } from '@/types';
 
-// Extended Assignment interface to include new settings
 interface ExtendedAssignment extends Assignment {
   showCorrectAnswers?: boolean;
   isGradedForPoints?: boolean;
 }
 
-// KaTeX Renderer Component (React 19 compatible replacement for MathJax)
 const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({ 
   children, 
   className = '' 
@@ -28,7 +26,6 @@ const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({
         if (children.includes('$') || children.includes('\\')) {
           let processedContent = children;
           
-          // Replace display math ($$...$$)
           processedContent = processedContent.replace(/\$\$(.*?)\$\$/g, (match, math) => {
             try {
               return katex.renderToString(math, { displayMode: true });
@@ -37,7 +34,6 @@ const KaTeXRenderer: React.FC<{ children: string; className?: string }> = ({
             }
           });
           
-          // Replace inline math ($...$)
           processedContent = processedContent.replace(/\$([^$]*?)\$/g, (match, math) => {
             try {
               return katex.renderToString(math, { displayMode: false });
@@ -70,7 +66,7 @@ interface AssignmentViewerProps {
 }
 
 export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onCloseAction }: AssignmentViewerProps) => {
-  const [responses, setResponses] = useState<(number | number[])[]>([]);  // ✅ FIXED: Allow both single and array
+  const [responses, setResponses] = useState<(number | number[])[]>([]);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -79,7 +75,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
   const [visibleQuestionIndex, setVisibleQuestionIndex] = useState(0);
 
   const totalQuestions = Object.keys(assignment.questions).length;
-  // ✅ FIXED: Proper type checking for answeredQuestions
   const answeredQuestions = responses.filter(r => 
     Array.isArray(r) ? r.length > 0 : (typeof r === 'number' && r !== -1)
   ).length;
@@ -87,7 +82,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
   const questionsArray = Object.entries(assignment.questions);
 
   useEffect(() => {
-    // Security verification on component mount
     const verifyAssignmentSecurity = () => {
       return verifyStudentDataSecurity(assignment);
     };
@@ -96,16 +90,14 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
       return;
     }
     
-    // Initialize responses array and check permissions
     const questionCount = Object.keys(assignment.questions).length;
-    setResponses(new Array(questionCount).fill(-1));  // ✅ FIXED: Initialize with -1 for unanswered
+    setResponses(new Array(questionCount).fill(-1));
     
-    // Debug assignment settings
-    console.log('🔍 Assignment settings debug:', {
-      showCorrectAnswers: assignment.showCorrectAnswers,
-      isGradedForPoints: assignment.isGradedForPoints,
-      title: assignment.title
-    });
+    // console.log('🔍 Assignment settings debug:', {
+    //   showCorrectAnswers: assignment.showCorrectAnswers,
+    //   isGradedForPoints: assignment.isGradedForPoints,
+    //   title: assignment.title
+    // });
     
     checkPermissions();
     checkExistingResponse();
@@ -118,9 +110,9 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
       );
       const data = await response.json();
       setCanEdit(data.canEdit);
-      console.log('Permissions check:', data);
+      // console.log('Permissions check:', data);
     } catch (error) {
-      console.error('Error checking permissions:', error);
+      // console.error('Error checking permissions:', error);
     }
   };
 
@@ -136,78 +128,68 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
           setExistingResponse(data.response);
           setResponses(data.response.userAssignmentResponse);
           setIsSubmitted(true);
-          
-          // Show results for students after submission (regardless of canEdit)
           setShowResults(true);
           
-          // Debug response data
-          console.log('🔍 Response debug:', {
-            hasGradingDetails: !!data.response.gradingDetails,
-            gradingDetailsLength: data.response.gradingDetails?.length || 0,
-            showResults: true, // Now always true after submission
-            canEdit: canEdit,
-            response: data.response
-          });
+          // console.log('🔍 Response debug:', {
+          //   hasGradingDetails: !!data.response.gradingDetails,
+          //   gradingDetailsLength: data.response.gradingDetails?.length || 0,
+          //   showResults: true,
+          //   canEdit: canEdit,
+          //   response: data.response
+          // });
         }
       }
     } catch (error) {
-      console.error('Error checking existing response:', error);
+      // console.error('Error checking existing response:', error);
     }
   };
 
-  // ✅ NEW: Helper function to determine if question is multiple choice
   const isQuestionMultipleChoice = (questionIndex: number): boolean => {
     const questionKey = (questionIndex + 1).toString();
     const question = assignment.questions[questionKey];
     
-    // ✅ SOLUTION: Use questionType from the clean assignment data
     if (question && 'questionType' in question) {
       return (question as any).questionType === 'multiple';
     }
     
-    // Fallback: After submission, use grading details
     if (shouldShowResults()) {
       const questionResult = getQuestionResult(questionIndex);
       return (questionResult?.correctOptions || []).length > 1;
     }
     
-    // Default fallback: treat as single choice
     return false;
   };
 
   const handleOptionSelect = (questionIndex: number, optionIndex: number) => {
-    if (isSubmitted && !canEdit) return;
+    if (isSubmitted) {
+      // console.log('🚫 Option selection disabled - assignment already submitted');
+      return;
+    }
     
     const isMultipleChoice = isQuestionMultipleChoice(questionIndex);
-    
     const newResponses = [...responses];
     
     if (isMultipleChoice) {
-      // Multiple choice: toggle selection
       const currentSelections = Array.isArray(newResponses[questionIndex]) 
         ? [...(newResponses[questionIndex] as number[])] 
         : [];
       const selectionIndex = currentSelections.indexOf(optionIndex);
       
       if (selectionIndex > -1) {
-        // Remove selection
         currentSelections.splice(selectionIndex, 1);
       } else {
-        // Add selection
         currentSelections.push(optionIndex);
       }
       
       newResponses[questionIndex] = currentSelections;
     } else {
-      // Single choice: replace selection
-      newResponses[questionIndex] = optionIndex;  // Store as single number for single choice
+      newResponses[questionIndex] = optionIndex;
     }
     
     setResponses(newResponses);
   };
 
   const handleSubmit = async () => {
-    // ✅ FIXED: Proper validation for both single and multiple choice
     const unanswered = responses.findIndex((r, index) => {
       const isMultiple = isQuestionMultipleChoice(index);
       if (isMultiple) {
@@ -225,15 +207,14 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     setIsSubmitting(true);
 
     try {
-      // Convert responses to appropriate format for backend
       const convertedResponses = responses.map((response, index) => {
         const isMultiple = isQuestionMultipleChoice(index);
         
         if (isMultiple) {
-          return Array.isArray(response) ? response : []; // Keep as array for multiple choice
+          return Array.isArray(response) ? response : [];
         } else {
           return typeof response === 'number' ? response : 
-                 (Array.isArray(response) ? response[0] || -1 : -1); // Convert to single value for single choice
+                 (Array.isArray(response) ? response[0] || -1 : -1);
         }
       });
 
@@ -244,7 +225,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
         userAssignmentResponse: convertedResponses
       };
 
-      console.log('Submitting assignment response (secure - no correct answers included):', payload);
+      // console.log('Submitting assignment response (secure - no correct answers included):', payload);
 
       const response = await fetch('/api/assignment-responses', {
         method: 'POST',
@@ -256,7 +237,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Assignment submitted and automatically graded:', data);
+        // console.log('Assignment submitted and automatically graded:', data);
         
       const gradeMessage = assignment.isGradedForPoints === false 
         ? 'Practice assignment completed successfully!\n\nGreat job practicing these concepts!'
@@ -268,27 +249,24 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
         setIsSubmitted(true);
         
         await checkExistingResponse();
-        
-        // Show results after submission (for all users)
         setShowResults(true);
         
-        // Debug after submission
-        setTimeout(() => {
-          console.log('🔍 Post-submission debug:', {
-            isSubmitted: true,
-            showResults: true, // Now always true after submission
-            shouldShowResults: shouldShowResults(),
-            shouldShowCorrectAnswers: shouldShowCorrectAnswers(),
-            existingResponse: existingResponse
-          });
-        }, 100);
+        // setTimeout(() => {
+        //   console.log('🔍 Post-submission debug:', {
+        //     isSubmitted: true,
+        //     showResults: true,
+        //     shouldShowResults: shouldShowResults(),
+        //     shouldShowCorrectAnswers: shouldShowCorrectAnswers(),
+        //     existingResponse: existingResponse
+        //   });
+        // }, 100);
       } else {
         const error = await response.json();
-        console.error('Submission failed:', error);
+        // console.error('Submission failed:', error);
         alert(`Failed to submit assignment: ${error.error}`);
       }
     } catch (error) {
-      console.error('Error submitting assignment:', error);
+      // console.error('Error submitting assignment:', error);
       alert('Failed to submit assignment. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -301,14 +279,14 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
 
   const shouldShowCorrectAnswers = () => {
     const result = shouldShowResults() && assignment.showCorrectAnswers !== false;
-    console.log('🔍 shouldShowCorrectAnswers check:', {
-      shouldShowResults: shouldShowResults(),
-      assignmentShowCorrectAnswers: assignment.showCorrectAnswers,
-      finalResult: result,
-      isSubmitted: isSubmitted,
-      hasExistingResponse: !!existingResponse,
-      hasGradingDetails: !!existingResponse?.gradingDetails
-    });
+    // console.log('🔍 shouldShowCorrectAnswers check:', {
+    //   shouldShowResults: shouldShowResults(),
+    //   assignmentShowCorrectAnswers: assignment.showCorrectAnswers,
+    //   finalResult: result,
+    //   isSubmitted: isSubmitted,
+    //   hasExistingResponse: !!existingResponse,
+    //   hasGradingDetails: !!existingResponse?.gradingDetails
+    // });
     return result;
   };
 
@@ -322,13 +300,11 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     );
   };
 
-  // ✅ UPDATED: Show correct question type
   const getQuestionType = (question: any, questionIndex: number): string => {
     const isMultiple = isQuestionMultipleChoice(questionIndex);
     return isMultiple ? 'Multiple Choice' : 'Single Choice';
   };
 
-  // Scroll to specific question
   const scrollToQuestion = (index: number) => {
     const questionElement = document.getElementById(`question-${index}`);
     if (questionElement) {
@@ -339,7 +315,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     }
   };
 
-  // Handle scroll to update visible question
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.target as HTMLDivElement;
     
@@ -349,7 +324,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
         const rect = questionElement.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
         
-        // Check if question is in the visible area (top half of container)
         if (rect.top >= containerRect.top && rect.top <= containerRect.top + containerRect.height / 2) {
           if (visibleQuestionIndex !== i) {
             setVisibleQuestionIndex(i);
@@ -360,7 +334,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
     }
   };
 
-  // Get question status for navigation
   const getQuestionStatus = (index: number) => {
     const response = responses[index];
     if (Array.isArray(response) ? response.length > 0 : (typeof response === 'number' && response !== -1)) {
@@ -381,7 +354,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
           <h1 className="text-xl font-bold text-teal-800">{assignment.title}</h1>
           <div className="text-xs text-gray-600 mt-1">
             <span>{totalQuestions} questions</span>
-            {/* ✅ UPDATED: Only show points info if assignment is graded */}
             {assignment.isGradedForPoints !== false && (
               <>
                 <span className="mx-2">•</span>
@@ -390,7 +362,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                 </span>
               </>
             )}
-            {/* ✅ NEW: Show ungraded indicator */}
             {assignment.isGradedForPoints === false && (
               <>
                 <span className="mx-2">•</span>
@@ -400,7 +371,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
           </div>
         </div>
         <div className="flex items-center gap-4">
-          {/* ✅ UPDATED: Only show score for graded assignments */}
           {shouldShowResults() && existingResponse && assignment.isGradedForPoints !== false && (
             <div className="text-right">
               <div className="text-xl font-bold text-teal-600">
@@ -411,7 +381,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
               </div>
             </div>
           )}
-          {/* ✅ NEW: Show completion status for ungraded assignments */}
           {shouldShowResults() && existingResponse && assignment.isGradedForPoints === false && (
             <div className="text-right">
               <div className="text-lg font-bold text-green-600">✓ Completed</div>
@@ -532,7 +501,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
           </div>
         </div>
 
-        {/* Main Questions Area - Scrollable */}
+        {/* Main Questions Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div 
             className="flex-1 overflow-y-auto scroll-smooth"
@@ -557,13 +526,11 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                       <div>
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">
                           Question {index + 1}
-                          {/* ✅ UPDATED: Only show points if assignment is graded */}
                           {assignment.isGradedForPoints !== false && (
                             <span className="ml-3 text-lg text-gray-500 font-normal">
                               ({question.points} point{question.points !== 1 ? 's' : ''})
                             </span>
                           )}
-                          {/* ✅ NEW: Show practice indicator for ungraded */}
                           {assignment.isGradedForPoints === false && (
                             <span className="ml-3 text-sm text-blue-600 font-normal bg-blue-100 px-2 py-1 rounded">
                               Practice Question
@@ -573,7 +540,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                         <div className="flex items-center gap-2">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                             assignment.isGradedForPoints === false
-                              ? 'bg-blue-100 text-blue-800'  // ✅ NEW: Blue for ungraded
+                              ? 'bg-blue-100 text-blue-800'
                               : question.points > 1
                               ? 'bg-orange-100 text-orange-800'
                               : 'bg-blue-100 text-blue-800'
@@ -581,7 +548,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                             {getQuestionType(question, index)}
                           </span>
                           
-                          {/* ✅ UPDATED: Only show point results for graded assignments */}
                           {shouldShowResults() && questionResult && assignment.isGradedForPoints !== false && (
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                               questionResult.isCorrect 
@@ -594,7 +560,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                             </span>
                           )}
                           
-                          {/* ✅ NEW: Show completion status for ungraded assignments */}
                           {shouldShowResults() && questionResult && assignment.isGradedForPoints === false && (
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                               questionResult.isCorrect 
@@ -613,7 +578,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                       <KaTeXRenderer>{question.question}</KaTeXRenderer>
                     </div>
 
-                    {/* ✅ UPDATED: Multiple Choice Instructions using new detection */}
+                    {/* Multiple Choice Instructions */}
                     {(() => {
                       const isMultipleChoice = isQuestionMultipleChoice(index);
                       
@@ -632,7 +597,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                       return null;
                     })()}
 
-                    {/* ✅ UPDATED: Options with proper multiple choice detection */}
+                    {/* Options */}
                     <div className="space-y-3">
                       {question.options.map((option, optionIndex) => {
                         const isMultipleChoice = isQuestionMultipleChoice(index);
@@ -640,7 +605,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                         const correctOptions = questionResult?.correctOptions || [];
                         
                         const currentResponse = responses[index];
-                        // ✅ FIXED: Proper type checking for isSelected
                         const isSelected = isMultipleChoice ? 
                           (Array.isArray(currentResponse) ? currentResponse.includes(optionIndex) : false) :
                           (typeof currentResponse === 'number' ? currentResponse === optionIndex : 
@@ -651,10 +615,10 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                         return (
                           <div
                             key={optionIndex}
-                            className={`group relative p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 transform ${
-                              isSubmitted && !canEdit
-                                ? 'cursor-not-allowed'
-                                : 'hover:scale-[1.01] hover:shadow-md active:scale-[0.99]'
+                            className={`group relative p-4 border-2 rounded-xl transition-all duration-200 ${
+                              isSubmitted 
+                                ? 'cursor-not-allowed opacity-90' 
+                                : 'cursor-pointer transform hover:scale-[1.01] hover:shadow-md active:scale-[0.99]'
                             } ${
                               isSelected
                                 ? showCorrectAnswer
@@ -668,14 +632,14 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                                   : 'bg-teal-100 border-teal-400 shadow-teal-100'
                                 : showCorrectAnswer && isCorrectOption
                                 ? 'bg-green-50 border-green-300'
+                                : isSubmitted
+                                ? 'border-gray-200 bg-gray-50'
                                 : 'border-gray-200 bg-white hover:border-teal-300 hover:bg-teal-50'
                             }`}
                             onClick={() => handleOptionSelect(index, optionIndex)}
                           >
                             <div className="flex items-center gap-4">
-                              {/* ✅ UPDATED: Checkbox or Radio Button based on question type */}
                               {isMultipleChoice ? (
-                                // Checkbox for multiple choice
                                 <div className={`relative w-5 h-5 border-2 rounded-md flex items-center justify-center transition-all duration-200 ${
                                   isSelected
                                     ? showCorrectAnswer
@@ -698,7 +662,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                                   )}
                                 </div>
                               ) : (
-                                // Radio button for single choice
                                 <div className={`relative w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
                                   isSelected
                                     ? showCorrectAnswer
@@ -720,12 +683,10 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                                 </div>
                               )}
 
-                              {/* Option Text */}
                               <div className="flex-1 text-gray-800 font-medium">
                                 <KaTeXRenderer>{option}</KaTeXRenderer>
                               </div>
 
-                              {/* Status Indicators */}
                               {showCorrectAnswer && isCorrectOption && !isSelected && (
                                 <span className="text-green-600 text-sm font-semibold px-2 py-1 bg-green-100 rounded-lg">
                                   ✓ Correct Answer
@@ -764,7 +725,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                       </div>
                     )}
                     
-                    {/* Alternative feedback when explanations are hidden */}
                     {!shouldShowCorrectAnswers() && shouldShowResults() && questionResult && (
                       <div className="mt-6 p-4 bg-gray-50 border border-gray-200 rounded-xl">
                         <div className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
@@ -773,7 +733,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
                         </div>
                         <div className={`font-medium ${questionResult.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
                           {questionResult.isCorrect ? (
-                            // ✅ UPDATED: Different messages for graded vs ungraded
                             assignment.isGradedForPoints !== false 
                               ? `✓ Correct! You earned ${questionResult.pointsEarned} point${questionResult.pointsEarned !== 1 ? 's' : ''}.`
                               : '✓ Correct! Well done on this practice question.'
@@ -791,7 +750,7 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
             </div>
           </div>
 
-          {/* Fixed Submit Button at Bottom */}
+          {/* Submit Button */}
           {!isSubmitted && (
             <div className="p-4 border-t bg-white shadow-lg">
               <div className="max-w-4xl mx-auto">
@@ -827,8 +786,6 @@ export const AssignmentViewer = ({ assignment, studentId, assignmentOwnerId, onC
           )}
         </div>
       </div>
-
-      {/* Results Summary - REMOVED as requested */}
     </div>
   );
 };

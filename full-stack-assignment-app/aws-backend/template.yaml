@@ -206,7 +206,7 @@ Resources:
             Path: /delete-assignment
             Method: options
 
-  # Lambda function for assignment responses
+  # ⭐ FIXED: Lambda function for assignment responses - Added missing environment variables
   AssignmentResponsesFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -216,6 +216,8 @@ Resources:
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: !Ref AssignmentsTable
+          GRADES_TABLE: gradesTable     # ⭐ ADDED: For saving grades
+          GSI_NAME: UserIdIndex         # ⭐ ADDED: For querying grades
       Events:
         AssignmentResponsesPost:
           Type: Api

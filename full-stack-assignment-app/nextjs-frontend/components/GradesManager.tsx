@@ -35,25 +35,21 @@ export const GradesManager = ({ teacherId }: GradesManagerProps) => {
   const [loading, setLoading] = useState(false);
   const [studentSummaries, setStudentSummaries] = useState<any[]>([]);
 
-  // Handle close
   const handleClose = () => {
     window.dispatchEvent(new CustomEvent('close-grades-manager'));
   };
 
-  // Handle view student grades
   const handleViewStudentGrades = (studentId: string) => {
     window.dispatchEvent(new CustomEvent('view-student-grades', { 
       detail: { studentId } 
     }));
   };
 
-  // Fetch all grades for assignments created by this teacher
   const fetchAllGrades = async () => {
     setLoading(true);
-    console.log('🔍 Fetching all grades for teacher:', teacherId);
+    // console.log('🔍 Fetching all grades for teacher:', teacherId);
     
     try {
-      // First, get all assignments by this teacher to get the assignment titles
       const assignmentsResponse = await fetch(
         `/api/assignments?userId=${teacherId}&requestingUserId=${teacherId}&userRole=teacher`
       );
@@ -65,20 +61,18 @@ export const GradesManager = ({ teacherId }: GradesManagerProps) => {
       const assignmentsData = await assignmentsResponse.json();
       const assignments = assignmentsData.assignments || [];
       
-      console.log('✅ Found assignments:', assignments.length);
+      // console.log('✅ Found assignments:', assignments.length);
       
-      // Create a map of assignmentId to title for quick lookup
       const assignmentTitles = new Map<string, string>();
       assignments.forEach((assignment: Assignment) => {
         assignmentTitles.set(assignment.assignmentId, assignment.title);
       });
       
-      // Get grades for each assignment from gradesTable
       const allGrades: Grade[] = [];
       
       for (const assignment of assignments) {
         try {
-          console.log('🔍 Fetching grades for assignment:', assignment.assignmentId);
+          // console.log('🔍 Fetching grades for assignment:', assignment.assignmentId);
           
           const gradesResponse = await fetch(
             `/api/grades?assignmentId=${assignment.assignmentId}&action=get-all-grades-for-assignment`
@@ -87,24 +81,22 @@ export const GradesManager = ({ teacherId }: GradesManagerProps) => {
           if (gradesResponse.ok) {
             const gradesData = await gradesResponse.json();
             if (gradesData.grades && gradesData.grades.length > 0) {
-              // Add assignment title to each grade for context
               const gradesWithTitle = gradesData.grades.map((grade: Grade) => ({
                 ...grade,
                 assignmentTitle: assignment.title
               }));
               allGrades.push(...gradesWithTitle);
-              console.log(`✅ Found ${gradesData.grades.length} grades for assignment ${assignment.title}`);
+              // console.log(`✅ Found ${gradesData.grades.length} grades for assignment ${assignment.title}`);
             }
           }
         } catch (error) {
-          console.error('❌ Error fetching grades for assignment:', assignment.assignmentId, error);
+          // console.error('❌ Error fetching grades for assignment:', assignment.assignmentId, error);
         }
       }
       
-      console.log('✅ Total grades found:', allGrades.length);
+      // console.log('✅ Total grades found:', allGrades.length);
       setGrades(allGrades);
       
-      // Create student summaries
       const studentMap = new Map();
       
       allGrades.forEach((grade: any) => {
@@ -126,13 +118,11 @@ export const GradesManager = ({ teacherId }: GradesManagerProps) => {
         student.totalPoints += grade.totalPoints;
         student.grades.push(grade);
         
-        // Update last submission if this one is more recent
         if (new Date(grade.submittedAt) > new Date(student.lastSubmission)) {
           student.lastSubmission = grade.submittedAt;
         }
       });
       
-      // Calculate averages and sort by student ID
       const summaries = Array.from(studentMap.values()).map((student: any) => ({
         ...student,
         averagePercentage: student.totalPoints > 0 
@@ -140,11 +130,11 @@ export const GradesManager = ({ teacherId }: GradesManagerProps) => {
           : 0
       })).sort((a, b) => a.studentId.localeCompare(b.studentId));
       
-      console.log('✅ Student summaries created:', summaries.length);
+      // console.log('✅ Student summaries created:', summaries.length);
       setStudentSummaries(summaries);
       
     } catch (error) {
-      console.error('❌ Error fetching grades:', error);
+      // console.error('❌ Error fetching grades:', error);
       setGrades([]);
       setStudentSummaries([]);
     } finally {

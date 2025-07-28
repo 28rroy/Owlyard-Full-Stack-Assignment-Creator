@@ -217,6 +217,8 @@ Resources:
         Variables:
           DYNAMODB_TABLE_NAME:
             Ref: AssignmentsTable
+          GRADES_TABLE: gradesTable
+          GSI_NAME: UserIdIndex
       Events:
         AssignmentResponsesPost:
           Type: Api
