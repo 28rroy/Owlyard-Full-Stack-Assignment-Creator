@@ -1,10 +1,10 @@
-# 📚 Full-Stack Assignment Management System
+# Full-Stack Assignment Management System
 
 A comprehensive web application for creating, managing, and taking educational assignments with advanced features like LaTeX math support, multiple choice questions, automatic grading, and detailed analytics. Built with Next.js frontend and AWS SAM serverless backend.
 
-## 🌟 Features
+## Features
 
-### 🎓 For Teachers
+### For Teachers
 - **Assignment Creation**: Intuitive interface for creating assignments with multiple question types
 - **LaTeX Math Support**: Full KaTeX integration for mathematical expressions and equations
 - **Flexible Question Types**: Single choice and multiple choice questions with customizable point values
@@ -12,17 +12,15 @@ A comprehensive web application for creating, managing, and taking educational a
 - **Student Analytics**: Comprehensive grade analysis with class statistics and performance trends
 - **Real-time Results**: View student submissions and detailed performance metrics instantly
 - **Auto-Grading**: Strict multiple choice validation with immediate feedback
-- **Export Capabilities**: Download grades and performance data for external analysis
 
-### 👨‍🎓 For Students
+### For Students
 - **Clean Interface**: User-friendly assignment taking experience with progress tracking
 - **LaTeX Rendering**: Beautiful mathematical expressions in questions and answers
 - **Immediate Feedback**: Instant results after submission (configurable by teacher)
-- **Multiple Attempts**: Retake assignments if enabled by instructor
-- **Grade History**: View past performance and track improvement over time
+=- **Grade History**: View past performance and track improvement over time
 - **Responsive Design**: Seamless experience across desktop, tablet, and mobile devices
 
-### 🔧 Technical Features
+### Technical Features
 - **Serverless Architecture**: AWS SAM with Lambda functions and DynamoDB
 - **Modern Frontend**: Next.js 15 with React 19 and TypeScript
 - **Real-time Data**: API Gateway with optimized caching and error handling
@@ -30,7 +28,7 @@ A comprehensive web application for creating, managing, and taking educational a
 - **Performance**: Optimized bundle size and lazy loading components
 - **Scalability**: Auto-scaling serverless infrastructure
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 full-stack-assignment-app/
@@ -63,7 +61,7 @@ full-stack-assignment-app/
     └── events/                   # API Gateway event definitions
 ```
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - **Node.js** 18.18.0+ with npm/yarn
@@ -157,7 +155,7 @@ npm run dev
 # Access application at http://localhost:3000
 ```
 
-## 📊 Grading System Deep Dive
+## Grading System Deep Dive
 
 ### Dual-Table Architecture
 The application uses a sophisticated dual-table storage system:
@@ -213,7 +211,7 @@ const isCorrect = hasAllCorrect && hasNoIncorrect &&
 | `/save-grades` | POST | Store calculated grades | grade data |
 | `/read-grades` | GET | Fetch grade analytics | assignmentId, userId, action |
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 ### Frontend
 - **Framework**: Next.js 15 (App Router) with React 19
@@ -237,7 +235,7 @@ const isCorrect = hasAllCorrect && hasNoIncorrect &&
 - **Security**: API Gateway throttling and AWS WAF ready
 - **Scalability**: Auto-scaling Lambda concurrency
 
-## 📦 Component Architecture
+## Component Architecture
 
 ### Core Components
 
@@ -258,7 +256,7 @@ const isCorrect = hasAllCorrect && hasNoIncorrect &&
 | `KaTeXRenderer` | Math expression rendering | Error handling, performance optimization |
 | `UserContext` | Global user state | Authentication simulation, role management |
 
-## 🔐 Security Implementation
+## Security Implementation
 
 ### Role-Based Access Control
 - **Teacher Mode**: Full CRUD operations on assignments and grades
@@ -280,7 +278,7 @@ const verifyStudentDataSecurity = (assignment: Assignment): boolean => {
 - **Input Validation**: Comprehensive server-side validation
 - **Error Handling**: Sanitized error messages without data leaks
 
-## 📈 Performance Optimizations
+## Performance Optimizations
 
 ### Frontend Optimizations
 - **Code Splitting**: Next.js automatic route-based splitting
@@ -294,7 +292,7 @@ const verifyStudentDataSecurity = (assignment: Assignment): boolean => {
 - **Caching Strategy**: API Gateway caching for static data
 - **Batch Operations**: Efficient bulk data operations
 
-## 🎨 UI/UX Features
+## UI/UX Features
 
 ### Design System
 - **Modern Aesthetic**: Clean, professional interface with consistent spacing
@@ -309,7 +307,7 @@ const verifyStudentDataSecurity = (assignment: Assignment): boolean => {
 - **Animations**: Subtle transitions and micro-interactions
 - **Feedback**: Immediate visual feedback for all user actions
 
-## 🚀 Deployment Guide
+## Deployment Guide
 
 ### Development Deployment
 ```bash
@@ -373,14 +371,11 @@ NEXT_PUBLIC_API_GATEWAY_URL=https://prod-api.execute-api.us-east-1.amazonaws.com
 NEXT_PUBLIC_ENVIRONMENT=production
 ```
 
-## 🔧 Configuration Options
+## Configuration Options
 
 ### Assignment Settings
 - **Grading Mode**: Points-based vs completion-based assessment
 - **Feedback Display**: Show/hide correct answers after submission
-- **Time Limits**: Optional timed assignments with auto-submit
-- **Attempt Limits**: Control number of retakes per student
-- **Access Control**: Date ranges and student group restrictions
 
 ### Question Configuration
 - **LaTeX Support**: Mathematical expressions with error handling
@@ -400,7 +395,7 @@ const systemConfig = {
 };
 ```
 
-## 🧪 Testing Strategy
+## Testing Strategy
 
 ### Frontend Testing
 ```bash
@@ -438,7 +433,7 @@ npm run test:load
 - [ ] Responsive design on mobile devices
 - [ ] API error handling and recovery
 
-## 🐛 Current Limitations & Known Issues
+## Current Limitations & Known Issues
 
 ### Technical Debt
 1. **No Real Authentication**: Currently uses simulated user context
@@ -460,7 +455,7 @@ npm run test:load
 4. **Basic Analytics**: Limited insights into learning patterns
 5. **No Integration**: No LMS or external system connectivity
 
-## 🚀 Improvement Roadmap
+## Improvement Roadmap
 
 ### Immediate Priorities (v2.0)
 - [ ] **Real Authentication**: Implement AWS Cognito or Auth0
@@ -483,7 +478,7 @@ npm run test:load
 - [ ] **Advanced Analytics**: ML-powered learning insights
 - [ ] **LMS Integration**: Canvas, Blackboard, Moodle compatibility
 
-## 📋 Developer Onboarding
+## Developer Onboarding
 
 ### Getting Started as a Developer
 
@@ -604,7 +599,7 @@ export async function GET() {
 - **SAM Local**: Test Lambda functions locally
 - **DynamoDB Local**: Test database operations offline
 
-## 🤝 Contributing
+## Contributing
 
 ### Pull Request Process
 1. **Fork repository** and create feature branch
@@ -637,11 +632,11 @@ npm run type-check
 npm audit
 ```
 
-## 📜 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **AWS SAM** for serverless infrastructure framework
 - **Next.js** team for the exceptional React framework
@@ -650,7 +645,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Lucide** for beautiful icon library
 - **TypeScript** for type safety and developer experience
 
-## 📊 Project Metrics
+## Project Metrics
 
 - **Lines of Code**: ~15,000 (Frontend: 8,000, Backend: 4,000, Config: 3,000)
 - **Components**: 8 'use client' components + utilities
