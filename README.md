@@ -58,6 +58,8 @@ full-stack-assignment-app/
 
 ## Quick Start
 
+This is an internship portfolio snapshot. Use only synthetic data in an isolated development environment. Authentication and server-side authorization must be added before any shared or production deployment.
+
 ### Prerequisites
 
 - Node.js and npm for the Next.js frontend
@@ -67,8 +69,8 @@ full-stack-assignment-app/
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/28rroy/Owlyard-Internship.git
-cd Owlyard-Internship/full-stack-assignment-app
+git clone https://github.com/28rroy/Owlyard-Full-Stack-Assignment-Creator.git
+cd Owlyard-Full-Stack-Assignment-Creator/full-stack-assignment-app
 ```
 
 ### 2. Frontend Setup
