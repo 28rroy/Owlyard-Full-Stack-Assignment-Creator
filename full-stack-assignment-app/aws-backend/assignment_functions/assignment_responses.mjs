@@ -38,7 +38,6 @@ const corsHeaders = {
 
 export const handler = async (event) => {
     console.log('🚀 Handler function called');
-    console.log('📋 Event:', JSON.stringify(event, null, 2));
     
     try {
         // Handle preflight OPTIONS request
@@ -68,8 +67,7 @@ export const handler = async (event) => {
                 statusCode: 500,
                 headers: corsHeaders,
                 body: JSON.stringify({ 
-                    error: 'DYNAMODB_TABLE_NAME environment variable not set',
-                    env: process.env
+                    error: 'Server configuration error'
                 })
             };
         }
@@ -100,8 +98,6 @@ export const handler = async (event) => {
             headers: corsHeaders,
             body: JSON.stringify({
                 error: 'Critical handler error',
-                message: handlerError.message,
-                stack: handlerError.stack,
                 timestamp: new Date().toISOString()
             })
         };
@@ -194,8 +190,6 @@ async function handleGetResponse(event, tableName) {
             headers: corsHeaders,
             body: JSON.stringify({
                 error: 'Error in GET handler',
-                message: getError.message,
-                stack: getError.stack,
                 timestamp: new Date().toISOString()
             })
         };
@@ -463,8 +457,6 @@ async function handleSubmitResponse(event, tableName, gradesTableName) {
             headers: corsHeaders,
             body: JSON.stringify({
                 error: 'Error in POST handler',
-                message: submitError.message,
-                stack: submitError.stack,
                 timestamp: new Date().toISOString()
             })
         };
